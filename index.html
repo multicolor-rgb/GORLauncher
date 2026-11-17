@@ -22,14 +22,19 @@
           <span class="nav-label" data-i18n="nav.library">Biblioteka</span>
           <span class="nav-mark" aria-hidden="true"></span>
         </button>
-        <button id="nav-downloads" class="nav-item">
+        <button id="nav-amazon" class="nav-item">
           <span class="nav-idx">02</span>
+          <span class="nav-label" data-i18n="nav.amazon">Prime Gaming</span>
+          <span class="nav-mark" aria-hidden="true"></span>
+        </button>
+        <button id="nav-downloads" class="nav-item">
+          <span class="nav-idx">03</span>
           <span class="nav-label" data-i18n="nav.downloads">Pobierania</span>
           <span id="dl-badge" class="badge hidden">0</span>
           <span class="nav-mark" aria-hidden="true"></span>
         </button>
         <button id="nav-settings" class="nav-item">
-          <span class="nav-idx">03</span>
+          <span class="nav-idx">04</span>
           <span class="nav-label" data-i18n="nav.settings">Ustawienia</span>
           <span class="nav-mark" aria-hidden="true"></span>
         </button>
@@ -101,9 +106,53 @@
           <div id="game-empty" class="empty-state hidden"></div>
         </section>
 
+        <section id="view-amazon" class="view">
+          <header class="view-head">
+            <p class="eyebrow"><span class="eyebrow-num">02</span><span class="eyebrow-sep">/</span><span data-i18n="hud.amazon">Amazon Games</span></p>
+            <h2 class="view-title" data-i18n="amazon.title">Prime Gaming</h2>
+            <p class="view-sub" data-i18n="amazon.sub">Gry z klienta Amazon Games. Zaloguj się kontem Amazon, aby je zobaczyć, pobrać i uruchomić.</p>
+          </header>
+
+          <div id="amazon-setup" class="amazon-setup hidden">
+            <p id="amazon-setup-msg" data-i18n="amazon.missing">Do obsługi Amazon Games potrzebne jest narzędzie nile.</p>
+            <p class="amazon-setup-hint" data-i18n="amazon.installHint">Możemy zainstalować je za Ciebie przez winget — bez terminala i bez uprawnień administratora.</p>
+            <code class="amazon-cmd" id="amazon-setup-cmd">winget install --id imLinguin.nile</code>
+            <div class="amazon-setup-actions">
+              <button id="btn-amazon-install-nile" class="btn btn-small btn-primary" data-i18n="amazon.installNile">Zainstaluj nile</button>
+              <button id="btn-amazon-copy" class="btn btn-small" data-i18n="amazon.copyCommand">Kopiuj komendę</button>
+              <button id="btn-amazon-retry" class="btn btn-small" data-i18n="amazon.recheck">Sprawdź ponownie</button>
+            </div>
+            <p id="amazon-setup-progress" class="amazon-setup-progress hidden"></p>
+            <p id="amazon-setup-error" class="amazon-setup-error hidden"></p>
+          </div>
+
+          <div id="amazon-bar" class="amazon-bar hidden">
+            <span id="amazon-user" class="badge"></span>
+            <div class="amazon-bar-actions">
+              <button id="btn-amazon-login" class="btn btn-small btn-primary" data-i18n="amazon.login">Zaloguj do Amazon</button>
+              <button id="btn-amazon-logout" class="btn btn-small hidden" data-i18n="amazon.logout">Wyloguj</button>
+              <button id="btn-amazon-refresh" class="btn btn-small hidden" data-i18n="amazon.refresh">Odśwież bibliotekę</button>
+            </div>
+          </div>
+
+          <div id="amazon-login-panel" class="amazon-setup hidden">
+            <p data-i18n="amazon.loginSteps">Zaloguj się w otwartej przeglądarce. Gdy Amazon przekieruje Cię na stronę amazon.com, skopiuj jej pełny adres z paska przeglądarki i wklej go poniżej.</p>
+            <div class="amazon-setup-actions">
+              <input id="amazon-login-url" class="amazon-login-input" type="text" autocomplete="off" spellcheck="false"
+                     data-i18n-placeholder="amazon.loginPlaceholder" placeholder="https://www.amazon.com/?openid.oa2.authorization_code=…" />
+              <button id="btn-amazon-login-finish" class="btn btn-small btn-primary" data-i18n="amazon.loginFinish">Zakończ logowanie</button>
+              <button id="btn-amazon-login-cancel" class="btn btn-small" data-i18n="amazon.loginCancel">Anuluj</button>
+            </div>
+            <p id="amazon-login-error" class="amazon-setup-error hidden"></p>
+          </div>
+
+          <div id="amazon-empty" class="empty-state hidden"></div>
+          <div id="amazon-grid" class="game-grid hidden"></div>
+        </section>
+
         <section id="view-downloads" class="view">
           <header class="view-head">
-            <p class="eyebrow"><span class="eyebrow-num">02</span><span class="eyebrow-sep">/</span><span data-i18n="hud.downloads">Pobierania</span></p>
+            <p class="eyebrow"><span class="eyebrow-num">03</span><span class="eyebrow-sep">/</span><span data-i18n="hud.downloads">Pobierania</span></p>
             <div class="view-head-row">
               <h2 class="view-title" data-i18n="downloads.title">Pobierania</h2>
               <div class="dl-toolbar">
@@ -113,12 +162,13 @@
             </div>
             <p class="view-sub" data-i18n="downloads.sub">Kolejka i historia pobrań instalatorów.</p>
           </header>
+          <div id="dl-amazon" class="download-list hidden"></div>
           <div id="download-list" class="download-list"></div>
         </section>
 
         <section id="view-settings" class="view">
           <header class="view-head">
-            <p class="eyebrow"><span class="eyebrow-num">03</span><span class="eyebrow-sep">/</span><span data-i18n="hud.settings">Konfiguracja</span></p>
+            <p class="eyebrow"><span class="eyebrow-num">04</span><span class="eyebrow-sep">/</span><span data-i18n="hud.settings">Konfiguracja</span></p>
             <h2 class="view-title" data-i18n="settings.title">Ustawienia</h2>
             <p class="view-sub" data-i18n="settings.sub">Język, wygląd i miejsce zapisu instalatorów.</p>
           </header>
@@ -150,8 +200,8 @@
             </div>
             <div class="settings-row">
               <div class="settings-label">
-                <h3 data-i18n="settings.dir">Folder zapisu pobrań</h3>
-                <p data-i18n="settings.dir.desc">Miejsce, do którego zapisywane są instalatory.</p>
+                <h3 data-i18n="settings.dir">Domyślny folder zapisu</h3>
+                <p data-i18n="settings.dir.desc">Używany, gdy gra nie ma własnego folderu pobierania.</p>
               </div>
               <div class="settings-control">
                 <span id="set-dir-label" class="path-chip" title="">—</span>

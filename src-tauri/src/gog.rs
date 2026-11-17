@@ -215,7 +215,9 @@ fn slug_from_url(url: &str) -> Option<String> {
 /// Normalizuje adres okładki z `getFilteredProducts`.
 /// Pole `image` to bazowy hash (np. `//images-2.gog-statics.com/<hash>`),
 /// do którego GOG dokłada format pliku — my robimy to samo co minigalaxy:
-/// prefiks `https:` oraz sufiks `_196.jpg`.
+/// prefiks `https:` oraz sufiks `_392.jpg`.
+/// `_392` to wariant 2x (392×220) — kafelki biblioteki są szersze niż 196 px,
+/// więc mniejszy wariant byłby rozmyty/rozpikselizowany.
 fn normalize_image(image: Option<String>) -> Option<String> {
     let mut u = image?;
     if u.trim().is_empty() {
@@ -230,9 +232,15 @@ fn normalize_image(image: Option<String>) -> Option<String> {
         .iter()
         .any(|ext| u.ends_with(ext));
     if !has_ext {
-        u.push_str("_196.jpg");
+        u.push_str("_392.jpg");
     }
     Some(u)
+}
+
+/// Podnosi rozdzielczość okładki zapisanej już w bazie (`_196.jpg` → `_392.jpg`).
+/// Dzięki temu starsze, zsynchronizowane biblioteki są ostre bez ponownej synchronizacji.
+pub fn upgrade_cover(url: &str) -> String {
+    url.replace("_196.jpg", "_392.jpg")
 }
 
 /// Buduje zrzut ekranu (miniatura + pełny rozmiar) z pojedynczego wpisu API.
@@ -848,15 +856,20 @@ mod tests {
 
     #[test]
     fn normalizuje_adres_okladki() {
-        // Bazowy hash z getFilteredProducts → dokładamy `_196.jpg` i schemat https.
+        // Bazowy hash z getFilteredProducts → dokładamy `_392.jpg` i schemat https.
         assert_eq!(
             normalize_image(Some(
                 "//images-2.gog-statics.com/8706f7fb87a4a41bc34254f3b49f59f96cf13d067b2c8bbfd8d41c327392052a".into()
             ))
             .as_deref(),
             Some(
-                "https://images-2.gog-statics.com/8706f7fb87a4a41bc34254f3b49f59f96cf13d067b2c8bbfd8d41c327392052a_196.jpg"
+                "https://images-2.gog-statics.com/8706f7fb87a4a41bc34254f3b49f59f96cf13d067b2c8bbfd8d41c327392052a_392.jpg"
             )
+        );
+        // Okładki zapisane wcześniej w mniejszym wariancie są podnoszone do 2x.
+        assert_eq!(
+            upgrade_cover("https://images-2.gog-statics.com/abc_196.jpg"),
+            "https://images-2.gog-statics.com/abc_392.jpg"
         );
         // Pełny adres z rozszerzeniem zostaje bez zmian (tylko schemat na https).
         assert_eq!(

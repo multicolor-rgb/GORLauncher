@@ -38,6 +38,21 @@ const d = {
   modalBody: $("#modal-body"), closeModalBtn: $("#btn-close-modal"), modalTabs: $("#modal-tabs"),
   screenshotViewer: $("#screenshot-viewer"), screenshotViewerImg: $("#screenshot-viewer-img"),
   screenshotViewerClose: $("#screenshot-viewer-close"),
+  // Amazon Games (Prime Gaming)
+  navAmazon: $("#nav-amazon"), viewAmazon: $("#view-amazon"),
+  amazonSetup: $("#amazon-setup"), amazonSetupMsg: $("#amazon-setup-msg"),
+  amazonCopyBtn: $("#btn-amazon-copy"), amazonRetryBtn: $("#btn-amazon-retry"),
+  amazonInstallNileBtn: $("#btn-amazon-install-nile"), amazonSetupError: $("#amazon-setup-error"),
+  amazonSetupProgress: $("#amazon-setup-progress"),
+  amazonBar: $("#amazon-bar"), amazonUser: $("#amazon-user"),
+  amazonLoginBtn: $("#btn-amazon-login"), amazonLogoutBtn: $("#btn-amazon-logout"),
+  amazonRefreshBtn: $("#btn-amazon-refresh"),
+  amazonLoginPanel: $("#amazon-login-panel"), amazonLoginUrl: $("#amazon-login-url"),
+  amazonLoginFinishBtn: $("#btn-amazon-login-finish"), amazonLoginCancelBtn: $("#btn-amazon-login-cancel"),
+  amazonLoginError: $("#amazon-login-error"),
+  amazonEmpty: $("#amazon-empty"), amazonGrid: $("#amazon-grid"),
+  // Pobrania Amazon pokazujemy w zakładce Pobierania, nad pobraniami GOG.
+  dlAmazon: $("#dl-amazon"),
 };
 
 let loggedIn = false;
@@ -66,6 +81,7 @@ let currentGameId = null;
 
 const VIEWS = {
   games: { view: d.viewGames, nav: d.navGames },
+  amazon: { view: d.viewAmazon, nav: d.navAmazon },
   downloads: { view: d.viewDls, nav: d.navDls },
   settings: { view: d.viewSettings, nav: d.navSettings },
 };
@@ -83,8 +99,10 @@ function statusLabel(s) { return t("status." + s, s); }
 
 async function init() {
   // Nawigacja
-  d.navGames.addEventListener("click", () => switchView("games"));
-  d.navDls.addEventListener("click", () => switchView("downloads"));
+  // Przełączenie widoku odświeża stany plików (sprawdzenie, czy instalatory nadal są na dysku).
+  d.navGames.addEventListener("click", () => { switchView("games"); loadDownloads(); });
+  d.navDls.addEventListener("click", () => { switchView("downloads"); loadDownloads(); });
+  d.navAmazon.addEventListener("click", () => { switchView("amazon"); loadAmazon(); });
   d.navSettings.addEventListener("click", () => switchView("settings"));
   d.topSettingsBtn.addEventListener("click", () => switchView("settings"));
   d.dlSettingsBtn.addEventListener("click", () => switchView("settings"));
@@ -109,6 +127,17 @@ async function init() {
     }
   });
   d.chooseDirBtn.addEventListener("click", () => chooseDownloadDir());
+  // Amazon Games: logowanie, odświeżanie biblioteki i akcje na kafelkach
+  d.amazonLoginBtn.addEventListener("click", amazonLogin);
+  d.amazonLogoutBtn.addEventListener("click", amazonLogout);
+  d.amazonRefreshBtn.addEventListener("click", () => loadAmazon(true));
+  d.amazonRetryBtn.addEventListener("click", () => loadAmazon());
+  d.amazonCopyBtn.addEventListener("click", amazonCopyCommand);
+  d.amazonInstallNileBtn.addEventListener("click", amazonInstallNile);
+  d.amazonLoginFinishBtn.addEventListener("click", amazonLoginFinish);
+  d.amazonLoginCancelBtn.addEventListener("click", amazonLoginCancel);
+  d.amazonLoginUrl.addEventListener("keydown", (e) => { if (e.key === "Enter") amazonLoginFinish(); });
+  d.amazonGrid.addEventListener("click", onAmazonGridClick);
   // Wyszukiwarka
   d.searchInput.addEventListener("input", () => {
     searchQuery = d.searchInput.value.trim().toLowerCase();
@@ -172,6 +201,29 @@ async function init() {
     else paintDl(el, row);
   });
   listen("download:state", () => loadDownloads());
+  listen("amazon:progress", (e) => {
+    const a = amazonActive.get(e.payload.gameId);
+    if (!a) return;
+    if (e.payload.line) a.line = e.payload.line;
+    if (e.payload.percent != null) a.percent = e.payload.percent;
+    renderAmazonActive();
+  });
+  listen("amazon:done", (e) => {
+    const { gameId, ok, error } = e.payload;
+    const a = amazonActive.get(gameId);
+    if (a) {
+      a.ok = !!ok; a.error = error || "";
+      if (ok) a.percent = 100;
+    }
+    renderAmazonActive();
+    loadAmazon(false);
+  });
+  listen("amazon:nile-progress", (e) => {
+    const line = e.payload && e.payload.line;
+    if (!line || !d.amazonSetupProgress) return;
+    d.amazonSetupProgress.textContent = line;
+    show(d.amazonSetupProgress);
+  });
 }
 
 /** Ustawia język, tłumaczy cały interfejs i (opcjonalnie) zapisuje wybór. */
@@ -180,6 +232,7 @@ function applyLanguage(lang, persist) {
   renderAuth();
   if (loggedIn) renderGames();
   renderDownloads();
+  renderAmazonUi();
   setDirLabel(currentDir);
   if (d.modal.open) {
     const loadingEl = d.modalBody.querySelector(".loading");
@@ -283,7 +336,8 @@ function renderGames() {
       ? `<img class="game-card-cover" src="${esc(src)}" alt="${esc(g.title)}" loading="lazy">`
       : `<div class="game-card-fallback">\uD83C\uDFAE</div>`;
     const genre = g.genre ? `<div class="game-card-genre">${esc(g.genre)}</div>` : "";
-    card.innerHTML = `${img}${genre}${platformBadgesHtml(g.platforms)}<div class="game-card-title">${esc(g.title)}</div>`;
+    card.innerHTML = `${img}${genre}${platformBadgesHtml(g.platforms)}` +
+      `<div class="game-card-foot"><div class="game-card-title">${esc(g.title)}</div>${gameStateTagHtml(g.id)}</div>`;
     card.addEventListener("click", () => openGame(g));
     d.gameGrid.appendChild(card);
   }
@@ -292,6 +346,23 @@ function renderGames() {
 /** Czy którykolwiek wiersz biblioteki zawiera informację o platformach. */
 function platformDataAvailable() {
   return gamesCache.some((g) => Array.isArray(g.platforms) && g.platforms.length);
+}
+
+/** Stan plików gry wyliczony z wierszy pobierań: `downloading` / `downloaded` / `missing`. */
+function gameState(gameId) {
+  const rows = [...dlRows.values()].filter((r) => String(r.gameId) === String(gameId));
+  if (rows.some((r) => r.status === "downloading" || r.status === "pending")) return "downloading";
+  if (rows.some((r) => r.status === "completed" && r.fileExists)) return "downloaded";
+  if (rows.some((r) => r.status === "completed")) return "missing";
+  return "";
+}
+
+/** Tag stanu gry na kafelku biblioteki (Pobrane / W trakcie pobierania / Brak pliku). */
+function gameStateTagHtml(gameId) {
+  const st = gameState(gameId);
+  if (!st) return "";
+  const key = { downloading: "game.state.downloading", downloaded: "game.state.downloaded", missing: "game.state.missing" }[st];
+  return `<span class="game-state ${st}">${esc(t(key))}</span>`;
 }
 
 /** Znaczniki platform (Win/Lin/Mac) w rogu kafelka gry. */
@@ -373,7 +444,7 @@ function renderModal(game, meta, installers, installersError) {
   } else if (!installers || !installers.length) {
     inst = `<p class="empty-state">${t("modal.noInstallers")}</p>`;
   } else {
-    inst = `<div class="platform-filter" id="inst-filter">` +
+    inst = gameDirRowHtml(game.id) + `<div class="platform-filter" id="inst-filter">` +
       platformChip("all", t("filter.all")) +
       platformChip("windows", t("filter.windows")) +
       platformChip("linux", t("filter.linux")) +
@@ -396,6 +467,8 @@ function renderModal(game, meta, installers, installersError) {
       renderInstallerList(game.id);
     });
   }
+
+  bindGameDirButton(game.id);
 
   // Podgląd zrzutów ekranu
   d.modalBody.querySelectorAll(".screenshot-thumb").forEach((img) =>
@@ -483,6 +556,99 @@ function dateOnly(s) {
   return m ? m[0] : str;
 }
 
+/** Wiersz z folderem docelowym gry + przycisk zmiany folderu (zakładka „Instalatory”). */
+function gameDirRowHtml(gameId) {
+  const g = gamesCache.find((x) => String(x.id) === String(gameId));
+  const own = !!(g && g.installDir);
+  const dir = own ? g.installDir : currentDir;
+  return `<div class="game-dir-row">` +
+    `<div class="game-dir-info">` +
+    `<span class="game-dir-label">${t("game.folder")}</span>` +
+    `<span class="path-chip" title="${esc(dir)}">${esc(dir || "—")}</span>` +
+    (own ? "" : `<span class="game-dir-hint">${t("game.folderHint")}</span>`) +
+    `</div>` +
+    (dir ? `<button class="btn btn-small" id="btn-open-game-dir" data-game="${gameId}">${t("folder.open")}</button>` : "") +
+    `<button class="btn btn-small" id="btn-game-dir" data-game="${gameId}">${t("game.folder.change")}</button>` +
+    `</div>`;
+}
+
+/** Podpina przycisk zmiany folderu gry (ponownie po każdym przerysowaniu wiersza). */
+function bindGameDirButton(gameId) {
+  const btn = d.modalBody.querySelector("#btn-game-dir");
+  if (btn) btn.addEventListener("click", () => pickGameDir(gameId));
+  const openBtn = d.modalBody.querySelector("#btn-open-game-dir");
+  if (openBtn) openBtn.addEventListener("click", () => openGameFolder(gameId));
+}
+
+/** Otwiera podaną ścieżkę (folder lub plik) w systemowym menedżerze plików. */
+async function openFolder(path) {
+  if (!path) return;
+  try {
+    await invoke("open_folder", { path });
+  } catch (e) {
+    console.error("open folder:", e);
+  }
+}
+
+/** Otwiera folder pobrania z listy pobierań (folder pliku instalatora). */
+function openDlFolder(id) {
+  const row = dlRows.get(id);
+  if (row) openFolder(row.targetPath);
+}
+
+/** Otwiera folder wybrany dla gry (lub domyślny, gdy gra nie ma jeszcze własnego). */
+function openGameFolder(gameId) {
+  const g = gamesCache.find((x) => String(x.id) === String(gameId));
+  openFolder((g && g.installDir) || currentDir);
+}
+
+/** Otwiera wybór folderu dla gry i zapisuje go; zwraca ścieżkę lub `null` (anulowano). */
+async function pickGameDir(gameId) {
+  try {
+    const dir = await invoke("pick_game_dir", { gameId: Number(gameId) });
+    if (!dir) return null;
+    const g = gamesCache.find((x) => String(x.id) === String(gameId));
+    if (g) g.installDir = dir;
+    const row = d.modalBody.querySelector(".game-dir-row");
+    if (row) { row.outerHTML = gameDirRowHtml(gameId); bindGameDirButton(gameId); }
+    return dir;
+  } catch (e) {
+    console.error("pick game dir:", e);
+    return null;
+  }
+}
+
+/** Folder gry — jeśli gra go nie ma, pyta o niego i zapamiętuje. */
+async function ensureGameDir(gameId) {
+  const g = gamesCache.find((x) => String(x.id) === String(gameId));
+  if (g && g.installDir) return g.installDir;
+  return pickGameDir(gameId);
+}
+
+/** Stan instalatora w danej grze (na podstawie wierszy pobierań). */
+function installerRowState(gameId, installerId) {
+  const rows = [...dlRows.values()].filter((r) =>
+    String(r.gameId) === String(gameId) && r.installerId === installerId);
+  if (!rows.length) return "";
+  if (rows.some((r) => r.status === "downloading" || r.status === "pending")) return "downloading";
+  const done = rows.filter((r) => r.status === "completed");
+  if (done.length && done.every((r) => r.fileExists)) return "downloaded";
+  if (done.length) return "missing";
+  if (rows.some((r) => r.status === "paused")) return "paused";
+  return "";
+}
+
+/** Tag stanu przy pojedynczym instalatorze. */
+function installerStateTagHtml(gameId, installerId) {
+  const st = installerRowState(gameId, installerId);
+  if (!st) return "";
+  const key = {
+    downloading: "game.state.downloading", downloaded: "game.state.downloaded",
+    missing: "game.state.missing", paused: "status.paused",
+  }[st];
+  return `<span class="inst-state ${st}">${esc(t(key))}</span>`;
+}
+
 /** HTML pojedynczego instalatora na liście w modalu. */
 function installerItemHtml(i, gameId) {
   return `
@@ -494,6 +660,7 @@ function installerItemHtml(i, gameId) {
           <span>${fmtSize(i.size)}</span>
           <span>v${esc(i.version || "?")}</span>
           <span>${esc(i.language || "en")}</span>
+          ${installerStateTagHtml(gameId, i.id)}
         </div>
       </div>
       <button class="btn btn-primary dl-t" data-game="${gameId}" data-inst="${esc(i.id)}">${t("modal.download")}</button>
@@ -501,6 +668,303 @@ function installerItemHtml(i, gameId) {
 }
 
 function closeModal() { closeScreenshotViewer(); d.modal.close(); }
+
+/* ------------------------------- AMAZON ------------------------------- */
+
+/** Stan integracji z Amazon Games: czy jest nile i czy jesteśmy zalogowani. */
+let amazonStatus = null;
+/** Gry z biblioteki Amazon Games. */
+let amazonGames = [];
+/** Trwające instalacje Amazon: id gry -> { title, percent, line, ok, error }. */
+const amazonActive = new Map();
+/** Czy czekamy na wklejenie adresu przekierowania po zalogowaniu w przeglądarce. */
+let amazonLoginPending = false;
+
+/** Odświeża status nile i (opcjonalnie) wymusza synchronizację biblioteki Amazon. */
+async function loadAmazon(syncFirst = false) {
+  try { amazonStatus = await invoke("amazon_status"); }
+  catch (e) { amazonStatus = { available: false, loggedIn: false, username: null }; }
+  renderAmazonStatus();
+  if (!amazonStatus.available || !amazonStatus.loggedIn) return;
+  if (syncFirst) {
+    const label = d.amazonRefreshBtn.textContent;
+    d.amazonRefreshBtn.disabled = true;
+    d.amazonRefreshBtn.textContent = t("amazon.syncing");
+    try { await invoke("amazon_sync"); } catch (e) { console.error("amazon sync:", e); }
+    d.amazonRefreshBtn.disabled = false;
+    d.amazonRefreshBtn.textContent = label;
+  }
+  try { amazonGames = await invoke("amazon_library"); }
+  catch (e) { amazonGames = []; console.error("amazon library:", e); }
+  renderAmazonGames();
+}
+
+/** Rysuje pasek statusu (brak nile / logowanie / konto) i stan pusty. */
+function renderAmazonStatus() {
+  const st = amazonStatus;
+  if (!st || !st.available) {
+    show(d.amazonSetup); hide(d.amazonBar); hide(d.amazonGrid); hide(d.amazonEmpty);
+    hide(d.amazonLoginPanel);
+    if (st) d.amazonSetupMsg.textContent = t("amazon.missing");
+    return;
+  }
+  hide(d.amazonSetup); show(d.amazonBar);
+  d.amazonLoginPanel.classList.toggle("hidden", !amazonLoginPending);
+  d.amazonUser.textContent = st.loggedIn ? (st.username || t("amazon.account")) : t("amazon.notLoggedIn");
+  d.amazonUser.classList.toggle("badge-online", !!st.loggedIn);
+  d.amazonLoginBtn.classList.toggle("hidden", !!st.loggedIn);
+  d.amazonLogoutBtn.classList.toggle("hidden", !st.loggedIn);
+  d.amazonRefreshBtn.classList.toggle("hidden", !st.loggedIn);
+  if (!st.loggedIn) {
+    hide(d.amazonGrid);
+    d.amazonEmpty.innerHTML = `<p>${t("amazon.loginHint")}</p>`;
+    show(d.amazonEmpty);
+  }
+}
+
+/** Kafelek gry Amazon: okładka zastępcza, tytuł, stan i akcje. */
+function amazonCardHtml(g) {
+  const initial = (g.title || "?").trim().charAt(0).toUpperCase();
+  const installed = g.installed && g.dirExists;
+  const badge = installed ? `<span class="game-state downloaded">${esc(t("amazon.installed"))}</span>` : "";
+  const primary = installed
+    ? `<button class="btn btn-small btn-primary" data-amazon-launch="${esc(g.id)}">${esc(t("amazon.play"))}</button>`
+    : `<button class="btn btn-small btn-primary" data-amazon-install="${esc(g.id)}">${esc(t("amazon.install"))}</button>`;
+  const open = g.installDir
+    ? `<button class="btn btn-small" data-amazon-open="${esc(g.installDir)}">${esc(t("folder.open"))}</button>`
+    : "";
+  // Okładka z biblioteki Amazon; gdy obrazek nie wczyta się, zostaje sama litera.
+  const cover = g.coverUrl
+    ? `<img src="${esc(g.coverUrl)}" alt="" loading="lazy" onerror="this.remove()">`
+    : "";
+  return `<div class="game-card amazon-card">
+    <div class="amazon-cover" aria-hidden="true"><span>${esc(initial)}</span>${cover}</div>
+    ${g.genre ? `<div class="game-card-genre">${esc(g.genre)}</div>` : ""}
+    <div class="game-card-foot"><div class="game-card-title">${esc(g.title)}</div>${badge}</div>
+    <div class="amazon-card-actions">${primary}${open}
+      <button class="btn btn-small" data-amazon-dir="${esc(g.id)}">${esc(t("amazon.folder"))}</button>
+    </div>
+  </div>`;
+}
+
+/** Rysuje siatkę gier Amazon (albo komunikat o pustej bibliotece). */
+function renderAmazonGames() {
+  if (!amazonStatus || !amazonStatus.available || !amazonStatus.loggedIn) return;
+  if (!amazonGames.length) {
+    d.amazonGrid.innerHTML = ""; hide(d.amazonGrid);
+    d.amazonEmpty.innerHTML = `<p>${t("amazon.empty")}</p>`;
+    show(d.amazonEmpty);
+    return;
+  }
+  hide(d.amazonEmpty);
+  show(d.amazonGrid);
+  d.amazonGrid.innerHTML = amazonGames.map(amazonCardHtml).join("");
+}
+
+/**
+ * Lista trwających/zakończonych instalacji Amazon z postępem.
+ * Rysowana w zakładce Pobierania (wspólnej z pobraniami GOG), nie w Prime Gaming.
+ */
+function renderAmazonActive() {
+  if (!amazonActive.size) {
+    d.dlAmazon.innerHTML = "";
+    hide(d.dlAmazon);
+    // Gdy nie ma już żadnych pobrań, przywracamy komunikat o pustej liście.
+    if (!dlRows.size) renderDownloads();
+    return;
+  }
+  show(d.dlAmazon);
+  d.dlAmazon.innerHTML = [...amazonActive.entries()].map(([id, a]) => {
+    const pct = a.percent == null ? null : Math.min(a.percent, 100);
+    const cls = a.ok === true ? "completed" : a.ok === false ? "failed" : "active";
+    const label = a.ok === true ? t("amazon.done") : a.ok === false ? t("amazon.failed") : t("status.downloading");
+    const bar = pct == null ? "" :
+      `<div class="dl-progress-track"><div class="dl-progress-fill ${cls}" style="width:${pct}%"></div></div>` +
+      `<div class="dl-info"><span class="dl-pct">${pct.toFixed(1)}%</span></div>`;
+    return `<div class="download-item" data-amazon-active="${esc(id)}">
+      <div class="dl-head">
+        <div class="dl-title">${esc(a.title)}</div>
+        <div class="dl-status ${cls}">${esc(label)}</div>
+      </div>
+      ${bar}
+      ${a.error ? `<div class="dl-error">${esc(a.error)}</div>` : `<div class="dl-path">${esc(a.line || "")}</div>`}
+    </div>`;
+  }).join("");
+}
+
+/** Wszystkie trzy widoki Amazon — używane m.in. przy zmianie języka. */
+function renderAmazonUi() {
+  renderAmazonStatus();
+  renderAmazonGames();
+  renderAmazonActive();
+}
+
+/** Pokazuje komunikat błędu pod polem adresu logowania. */
+function amazonLoginError(msg) {
+  d.amazonLoginError.textContent = msg;
+  show(d.amazonLoginError);
+}
+
+/**
+ * Logowanie konta Amazon.
+ * nile w trybie `--non-interactive` wypisuje adres logowania i kończy działanie
+ * (interaktywne `nile auth --login` czytałoby dane z terminala i kończyło się EOFError),
+ * więc backend otwiera stronę w przeglądarce, a my prosimy o wklejenie adresu powrotnego.
+ */
+async function amazonLogin() {
+  d.amazonLoginBtn.disabled = true;
+  d.amazonLoginBtn.textContent = t("amazon.loginOpening");
+  hide(d.amazonLoginError);
+  try {
+    await invoke("amazon_login");
+    amazonLoginPending = true;
+    d.amazonLoginUrl.value = "";
+    show(d.amazonLoginPanel);
+    d.amazonLoginUrl.focus();
+  } catch (e) {
+    d.amazonEmpty.innerHTML = `<p class="error">${t("error.prefix")}: ${esc(String(e))}</p>`;
+    show(d.amazonEmpty);
+  } finally {
+    d.amazonLoginBtn.disabled = false;
+    d.amazonLoginBtn.textContent = t("amazon.login");
+  }
+  renderAmazonStatus();
+}
+
+/** Kończy logowanie na podstawie adresu, na który przekierowała przeglądarka. */
+async function amazonLoginFinish() {
+  const url = d.amazonLoginUrl.value.trim();
+  hide(d.amazonLoginError);
+  if (!url) { amazonLoginError(t("amazon.loginNoUrl")); return; }
+  const btn = d.amazonLoginFinishBtn;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = t("amazon.loginFinishing");
+  let ok = false;
+  try {
+    amazonStatus = await invoke("amazon_login_complete", { redirect: url });
+    ok = true;
+    amazonLoginPending = false;
+    d.amazonLoginUrl.value = "";
+    hide(d.amazonLoginPanel);
+    renderAmazonStatus();
+  } catch (e) {
+    amazonLoginError(`${t("error.prefix")}: ${String(e)}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+  if (ok) await loadAmazon(true);
+}
+
+/** Anuluje oczekiwanie na adres przekierowania. */
+function amazonLoginCancel() {
+  amazonLoginPending = false;
+  d.amazonLoginUrl.value = "";
+  hide(d.amazonLoginError);
+  hide(d.amazonLoginPanel);
+  renderAmazonStatus();
+}
+
+/** Wylogowanie konta Amazon. */
+async function amazonLogout() {
+  try { await invoke("amazon_logout"); } catch (e) { console.error("amazon logout:", e); }
+  amazonGames = [];
+  d.amazonGrid.innerHTML = "";
+  await loadAmazon();
+}
+
+/** Kopiuje komendę instalacji nile do schowka. */
+async function amazonCopyCommand() {
+  const cmd = "winget install --id imLinguin.nile";
+  try {
+    await navigator.clipboard.writeText(cmd);
+    const label = d.amazonCopyBtn.textContent;
+    d.amazonCopyBtn.textContent = t("amazon.copied");
+    setTimeout(() => { d.amazonCopyBtn.textContent = label; }, 1500);
+  } catch (e) { console.error("clipboard:", e); }
+}
+
+/** Instaluje nile przez winget (bez terminala) i odświeża status integracji. */
+async function amazonInstallNile() {
+  const btn = d.amazonInstallNileBtn;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = t("amazon.installingNile");
+  hide(d.amazonSetupError);
+  d.amazonSetupError.textContent = "";
+  d.amazonSetupProgress.textContent = t("amazon.nileProgress");
+  show(d.amazonSetupProgress);
+  try {
+    await invoke("amazon_install_nile");
+  } catch (e) {
+    d.amazonSetupError.textContent = `${t("error.prefix")}: ${String(e)}`;
+    show(d.amazonSetupError);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+    hide(d.amazonSetupProgress);
+  }
+  await loadAmazon();
+}
+
+/** Wybór folderu instalacji dla gry Amazon. */
+async function amazonPickDir(id) {
+  let dir = null;
+  try { dir = await invoke("pick_amazon_dir", { gameId: id }); }
+  catch (e) { console.error("pick amazon dir:", e); return; }
+  if (!dir) return;
+  const g = amazonGames.find((x) => x.id === id);
+  if (g) g.installDir = dir;
+  renderAmazonGames();
+}
+
+/** Pobiera i instaluje grę Amazon (przez nile); postęp przychodzi zdarzeniami. */
+async function amazonInstall(id) {
+  const running = amazonActive.get(id);
+  if (running && running.ok == null) return; // już się instaluje
+  const g = amazonGames.find((x) => x.id === id);
+  if (!g) return;
+  if (!g.installDir) {
+    await amazonPickDir(id);
+    if (!g.installDir) return; // anulowano wybór folderu
+  }
+  amazonActive.set(id, { title: g.title, percent: null, line: t("amazon.starting"), ok: null, error: "" });
+  renderAmazonActive();
+  try {
+    await invoke("amazon_install", { gameId: id });
+    // Postęp jest w zakładce Pobierania — od razu ją pokazujemy (jak przy GOG).
+    switchView("downloads");
+  } catch (e) {
+    amazonActive.set(id, { title: g.title, percent: null, line: "", ok: false, error: String(e) });
+    renderAmazonActive();
+  }
+}
+
+/** Uruchamia zainstalowaną grę Amazon. */
+async function amazonLaunch(id) {
+  const g = amazonGames.find((x) => x.id === id);
+  try {
+    await invoke("amazon_launch", { gameId: id });
+    amazonActive.delete(id);
+    renderAmazonActive();
+  } catch (e) {
+    amazonActive.set(id, { title: g ? g.title : id, percent: null, line: "", ok: false, error: String(e) });
+    renderAmazonActive();
+  }
+}
+
+/** Obsługa kliknięć na kafelkach Amazon (delegacja — kafelki są przerysowywane). */
+async function onAmazonGridClick(e) {
+  const launch = e.target.closest("[data-amazon-launch]");
+  if (launch) { await amazonLaunch(launch.getAttribute("data-amazon-launch")); return; }
+  const install = e.target.closest("[data-amazon-install]");
+  if (install) { await amazonInstall(install.getAttribute("data-amazon-install")); return; }
+  const dir = e.target.closest("[data-amazon-dir]");
+  if (dir) { await amazonPickDir(dir.getAttribute("data-amazon-dir")); return; }
+  const open = e.target.closest("[data-amazon-open]");
+  if (open) openFolder(open.getAttribute("data-amazon-open"));
+}
 
 /* ---------------------------- folder zapisu ---------------------------- */
 
@@ -527,10 +991,8 @@ async function chooseDownloadDir() {
 
 /** Nowe pobranie: jeśli folder nie jest jeszcze ustawiony, najpierw o niego pytamy. */
 async function startDownload(gid, iid, btn) {
-  if (!currentDir) {
-    const dir = await chooseDownloadDir();
-    if (dir === null) return; // anulowano wybór folderu
-  }
+  // Każda gra ma własny folder — pytamy o niego przy pierwszym pobraniu.
+  if (!(await ensureGameDir(gid))) return; // anulowano wybór folderu
   if (btn) { btn.disabled = true; btn.textContent = t("dl.prepare"); }
   try {
     await invoke("start_download", { gameId: gid, installerId: iid });
@@ -567,13 +1029,21 @@ async function loadDownloads() {
   dlRows.clear();
   for (const r of rows) dlRows.set(r.id, r);
   renderDownloads();
+  // Stany na kafelkach biblioteki i przy instalatorach zależą od listy pobrań.
+  if (gamesCache.length) renderGames();
 }
 
 function renderDownloads() {
   d.dlList.innerHTML = "";
   const rows = [...dlRows.values()].sort((a, b) => b.id - a.id);
-  if (!rows.length) { d.dlList.innerHTML = `<p class="empty-state">${t("downloads.empty")}</p>`; hide(d.dlBadge); return; }
-  const active = rows.filter((x) => x.status === "downloading").length;
+  // Pobrania Amazon liczą się do tej samej listy i plakietki w menu.
+  const amazonRunning = [...amazonActive.values()].filter((a) => a.ok == null).length;
+  if (!rows.length && !amazonActive.size) {
+    d.dlList.innerHTML = `<p class="empty-state">${t("downloads.empty")}</p>`;
+    hide(d.dlBadge);
+    return;
+  }
+  const active = rows.filter((x) => x.status === "downloading").length + amazonRunning;
   d.dlBadge.textContent = active > 0 ? String(active) : "\u2713";
   show(d.dlBadge);
   for (const x of rows) {
@@ -593,7 +1063,12 @@ function dlPct(row) {
 
 /** Klasa CSS opisująca stan wiersza. */
 function dlClass(status) {
-  return ["completed", "failed", "paused", "cancelled"].includes(status) ? status : "active";
+  return ["completed", "failed", "paused", "cancelled", "missing"].includes(status) ? status : "active";
+}
+
+/** Status do wyświetlenia: ukończone pobranie bez pliku na dysku to „missing”. */
+function displayStatus(row) {
+  return row.status === "completed" && !row.fileExists ? "missing" : row.status;
 }
 
 /**
@@ -602,15 +1077,18 @@ function dlClass(status) {
  */
 function paintDl(el, row) {
   const pct = Math.min(dlPct(row), 100);
-  const cls = dlClass(row.status);
+  const status = displayStatus(row);
+  const cls = dlClass(status);
   const busy = row.status === "downloading" || row.status === "pending";
-  el.dataset.status = row.status;
+  el.dataset.status = status;
   el.innerHTML = `
     <div class="dl-head">
       <div class="dl-title">${esc(row.gameTitle)}</div>
-      <div class="dl-status ${cls}">${statusLabel(row.status)}</div>
+      <div class="dl-status ${cls}">${statusLabel(status)}</div>
     </div>
     <div class="dl-filename">${esc(row.filename)}</div>
+    <div class="dl-path" title="${esc(row.targetPath)}">${esc(row.targetPath)}</div>
+    ${status === "missing" ? `<div class="dl-missing">${t("dl.missingHint")}</div>` : ""}
     <div class="dl-progress-track"><div class="dl-progress-fill ${cls}" style="width:${pct}%"></div></div>
     <div class="dl-info">
       <span>${fmtSize(row.downloadedBytes)} / ${fmtSize(row.totalBytes)}</span>
@@ -618,6 +1096,7 @@ function paintDl(el, row) {
     </div>
     ${row.error ? `<div class="dl-error">${esc(row.error)}</div>` : ""}
     <div class="dl-actions">
+      ${row.status === "completed" ? `<button class="btn btn-small" onclick="openDlFolder(${row.id})">${t("folder.open")}</button>` : ""}
       ${busy ? `<button class="btn btn-small" onclick="pauseDl(${row.id})">${t("dl.stop")}</button>` : ""}
       ${(row.status === "paused" || row.status === "failed") ? `<button class="btn btn-small btn-primary" onclick="resumeDl(${row.gameId},'${esc(row.installerId)}')">${t("dl.resume")}</button>` : ""}
       ${(busy || row.status === "paused" || row.status === "failed") ? `<button class="btn btn-small" onclick="cancelDl(${row.id})">${t("dl.cancel")}</button>` : ""}
@@ -645,5 +1124,6 @@ function fmtSize(b) { b = parseInt(b) || 0; if (b < 1024) return b + " B"; if (b
 window.pauseDl = pauseDl;
 window.cancelDl = cancelDl;
 window.resumeDl = resumeDl;
+window.openDlFolder = openDlFolder;
 window.closeModal = closeModal;
 document.addEventListener("DOMContentLoaded", init);

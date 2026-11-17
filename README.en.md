@@ -21,7 +21,11 @@ download queue are empty.*
   and cancel.
 - **Two themes** (dark/light) and **two languages** (Polish/English) — applied instantly and
   stored in settings.
-- **Download folder picker**.
+- **A separate folder per game** — chosen on the first download; the app checks whether the
+  files are still on disk and marks each game as downloaded or downloading.
+- **Prime Gaming (Amazon Games)** — Amazon sign-in, the library from the Amazon Games client,
+  downloading into a chosen folder and launching, handled by
+  [`nile`](https://github.com/imLinguin/nile).
 
 ## Screenshots
 
@@ -37,6 +41,9 @@ download queue are empty.*
 
 - **Node.js** ≥ 20 and **Rust** ≥ 1.75 ([rustup](https://rustup.rs))
 - **Windows:** MSVC Build Tools and WebView2 (preinstalled on Windows 10/11)
+- **Amazon Games (optional):** [`nile`](https://github.com/imLinguin/nile) —
+  the app installs it with one button in the Prime Gaming tab (via `winget`, no terminal).
+  Manual: `winget install --id imLinguin.nile`.
 - **Linux:** `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`,
   `build-essential`
 - **macOS:** Xcode Command Line Tools
@@ -88,7 +95,8 @@ Application data directory (`dirs::data_dir()/goglite`):
 
 Files: `goglite.db` (SQLite), `auth.json`, `settings.json`.
 
-Downloads go to the system *Downloads* folder by default. It can be changed in **Settings**;
+Each game can use its own download folder (**Installers** tab → **Change folder…**).
+Downloads go to the system *Downloads* folder by default, and it can be changed in **Settings**;
 the `GOGLITE_DOWNLOAD_DIR` environment variable takes precedence over the stored setting.
 
 ## Project layout
@@ -135,11 +143,19 @@ goglite/
 | `pause_download`, `cancel_download` | Pause / cancel a download |
 | `get_downloads` | Download queue and history |
 | `get_download_dir`, `pick_download_dir` | Read and choose the download folder |
+| `pick_game_dir` | Choose the download folder for a single game |
+| `open_folder` | Open a folder (or the folder containing a file) in the system file manager |
+| `amazon_status` | Whether `nile` is available and the Amazon account is signed in |
+| `amazon_login`, `amazon_login_complete`, `amazon_logout` | Amazon sign-in (start + finish with the redirect URL) and sign-out |
+| `amazon_library`, `amazon_sync` | Amazon Games library (cached / forced refresh) |
+| `amazon_install_nile` | Installs `nile` via winget (button in the Prime Gaming tab) |
+| `pick_amazon_dir` | Choose the install folder for an Amazon game |
+| `amazon_install`, `amazon_launch` | Download/install and launch an Amazon game |
 | `get_settings`, `set_language`, `set_theme` | Application settings |
 | `detect_os` | OS and architecture |
 
 Events emitted to the frontend: `auth:changed`, `auth:error`, `library:page`,
-`download:progress`, `download:state`.
+`download:progress`, `download:state`, `amazon:progress`, `amazon:done`.
 
 ## Limitations
 
@@ -147,6 +163,9 @@ Events emitted to the frontend: `auth:changed`, `auth:error`, `library:page`,
   that fails you have to sign in again.
 - Every installer file is queued separately.
 - The app relies on GOG's unofficial private API, so it may break if GOG changes it.
+- Amazon Games works only through `nile` (Amazon has no public API). An Amazon account with
+  games in the Amazon Games client is required; titles available only as keys for other stores
+  are not handled here. Some games need Amazon services to launch.
 
 ## License
 

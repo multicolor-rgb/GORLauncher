@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS games (
     developers     TEXT,                  -- producenci (JSON array, uzupełniane z v2 API)
     publishers     TEXT,                  -- wydawcy (JSON array, uzupełniane z v2 API)
     platforms      TEXT,                  -- platformy: JSON array ["windows","linux","macos"]
+    install_dir    TEXT,                  -- własny folder pobierania wybrany dla tej gry
     last_synced_at INTEGER NOT NULL DEFAULT 0  -- timestamp (ms od epoch)
 );
 
@@ -39,3 +40,12 @@ CREATE TABLE IF NOT EXISTS downloads (
 CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
 CREATE INDEX IF NOT EXISTS idx_downloads_game   ON downloads(game_id);
 CREATE INDEX IF NOT EXISTS idx_games_title      ON games(title COLLATE NOCASE);
+
+-- Lokalny stan gier z Amazon Games (Prime Gaming): wybrany folder i znacznik instalacji.
+-- Tytuły i sama biblioteka pochodzą z `nile`, więc nie są tu duplikowane.
+CREATE TABLE IF NOT EXISTS amazon_games (
+    id           TEXT PRIMARY KEY,            -- Amazon product id (UUID)
+    install_dir  TEXT,                        -- folder wybrany dla tej gry
+    installed    INTEGER NOT NULL DEFAULT 0,  -- 1 po udanym `nile install`
+    last_seen_at INTEGER NOT NULL DEFAULT 0
+);

@@ -2,6 +2,7 @@
 // Łączy wszystkie moduły i uruchamia aplikację Tauri.
 
 mod auth;
+mod amazon;
 mod commands;
 mod db;
 mod downloads;
@@ -98,6 +99,18 @@ pub fn run() {
             commands::get_downloads,
             commands::get_download_dir,
             commands::pick_download_dir,
+            commands::pick_game_dir,
+            commands::open_folder,
+            amazon::amazon_status,
+            amazon::amazon_login,
+            amazon::amazon_login_complete,
+            amazon::amazon_logout,
+            amazon::amazon_library,
+            amazon::amazon_sync,
+            amazon::amazon_install_nile,
+            amazon::pick_amazon_dir,
+            amazon::amazon_install,
+            amazon::amazon_launch,
             commands::get_settings,
             commands::set_language,
             commands::set_theme,

@@ -80,6 +80,56 @@ pub async fn pick_download_dir(
     Ok(Some(path.to_string_lossy().to_string()))
 }
 
+/// Otwiera natywne okno wyboru folderu dla **konkretnej gry** i zapamiętuje go w bazie.
+/// Zwraca `None`, jeśli użytkownik anulował. Kolejne pobrania tej gry trafiają właśnie tam.
+#[tauri::command]
+pub async fn pick_game_dir(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    game_id: i64,
+) -> Result<Option<String>, String> {
+    let start = state
+        .db
+        .get_game_install_dir(game_id)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| state.download_dir.lock().unwrap().clone());
+    let picked = app
+        .dialog()
+        .file()
+        .set_directory(&start)
+        .blocking_pick_folder();
+    let Some(path) = picked.and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    let dir = path.to_string_lossy().to_string();
+    state
+        .db
+        .set_game_install_dir(game_id, Some(&dir))
+        .map_err(|e| e.to_string())?;
+    Ok(Some(dir))
+}
+
+/// Otwiera w systemowym menedżerze plików folder podanej ścieżki.
+/// Jeśli ścieżka wskazuje plik, otwierany jest folder, w którym ten plik leży.
+#[tauri::command]
+pub fn open_folder(app: AppHandle, path: String) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    let dir = if p.is_dir() {
+        p
+    } else {
+        p.parent()
+            .map(|x| x.to_path_buf())
+            .ok_or_else(|| "Nieprawidłowa ścieżka".to_string())?
+    };
+    if !dir.exists() {
+        return Err("Folder nie istnieje".to_string());
+    }
+    tauri_plugin_opener::OpenerExt::opener(&app)
+        .open_path(dir.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 // —————————— USTAWIENIA ——————————
 
 /// Zwraca aktualne ustawienia aplikacji dla frontendu.
@@ -151,6 +201,8 @@ pub async fn sync_library(app: AppHandle, state: State<'_, AppState>) -> Result<
         platforms: g.platforms,
         // Producenci/wydawcy są znani dopiero po zapytaniu do v2 API (przy otwarciu gry).
         developers: Vec::new(), publishers: Vec::new(),
+        // Folder gry jest ustawiany osobno i nie jest nadpisywany przez synchronizację.
+        install_dir: None,
     }).collect();
     let count = rows.len();
     state.db.upsert_games(&rows).map_err(|e| e.to_string())?;
@@ -160,7 +212,14 @@ pub async fn sync_library(app: AppHandle, state: State<'_, AppState>) -> Result<
 
 #[tauri::command]
 pub fn get_games(state: State<'_, AppState>) -> Result<Vec<GameRow>, String> {
-    state.db.list_games().map_err(|e| e.to_string())
+    let mut rows = state.db.list_games().map_err(|e| e.to_string())?;
+    // Okładki zapisane wcześniej w rozmiarze `_196` są rozmyte na kafelkach — zwracamy wariant 2x.
+    for row in rows.iter_mut() {
+        if let Some(url) = row.image_url.as_deref() {
+            row.image_url = Some(gog::upgrade_cover(url));
+        }
+    }
+    Ok(rows)
 }
 
 #[tauri::command]
@@ -204,7 +263,12 @@ pub async fn start_download(
         .find(|i| i.download_id == installer_id)
         .ok_or_else(|| "Nie znaleziono instalatora".to_string())?;
 
-    let dir = state.download_dir.lock().unwrap().clone();
+    // Folder wybrany dla tej gry ma pierwszeństwo; domyślny folder aplikacji jest fallbackiem.
+    let dir = state
+        .db
+        .get_game_install_dir(game_id)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| state.download_dir.lock().unwrap().clone());
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
     let total_files = installer.files.iter().filter(|f| !f.downlink.is_empty()).count();

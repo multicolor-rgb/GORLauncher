@@ -21,7 +21,11 @@ i kolejka pobrań są puste.*
   i anulowaniem.
 - **Dwa motywy** (ciemny/jasny) i **dwa języki** (polski/angielski) — zmiana natychmiastowa,
   zapisywana w ustawieniach.
-- **Wybór folderu zapisu** instalatorów.
+- **Osobny folder dla każdej gry** — wybierany przy pierwszym pobraniu; aplikacja sprawdza,
+  czy pliki nadal są na dysku, i oznacza grę jako pobraną lub w trakcie pobierania.
+- **Prime Gaming (Amazon Games)** — logowanie kontem Amazon, biblioteka gier z klienta Amazon
+  Games, pobieranie do wybranego folderu i uruchamianie; obsługa przez narzędzie
+  [`nile`](https://github.com/imLinguin/nile).
 
 ## Zrzuty ekranu
 
@@ -37,6 +41,9 @@ i kolejka pobrań są puste.*
 
 - **Node.js** ≥ 20 i **Rust** ≥ 1.75 ([rustup](https://rustup.rs))
 - **Windows:** MSVC Build Tools oraz WebView2 (w Windows 10/11 jest domyślnie)
+- **Amazon Games (opcjonalnie):** [`nile`](https://github.com/imLinguin/nile) —
+  aplikacja instaluje je jednym przyciskiem w zakładce Prime Gaming (przez `winget`, bez terminala).
+  Ręcznie: `winget install --id imLinguin.nile`.
 - **Linux:** `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`,
   `build-essential`
 - **macOS:** Xcode Command Line Tools
@@ -88,7 +95,8 @@ Katalog danych aplikacji (`dirs::data_dir()/goglite`):
 
 Pliki: `goglite.db` (SQLite), `auth.json`, `settings.json`.
 
-Domyślny folder pobrań to systemowy katalog „Pobrane”. Można go zmienić w **Ustawieniach**;
+Każda gra może mieć własny folder pobierania (zakładka **Instalatory** → **Zmień folder…**).
+Domyślny folder to systemowy katalog „Pobrane” i można go zmienić w **Ustawieniach**;
 zmienna środowiskowa `GOGLITE_DOWNLOAD_DIR` ma pierwszeństwo przed zapisanym ustawieniem.
 
 ## Struktura projektu
@@ -135,11 +143,19 @@ goglite/
 | `pause_download`, `cancel_download` | Wstrzymuje / anuluje pobieranie |
 | `get_downloads` | Kolejka i historia pobrań |
 | `get_download_dir`, `pick_download_dir` | Odczyt i wybór folderu zapisu |
+| `pick_game_dir` | Wybór folderu pobierania dla konkretnej gry |
+| `open_folder` | Otwiera folder (lub folder pliku) w systemowym menedżerze plików |
+| `amazon_status` | Czy `nile` jest dostępny i czy konto Amazon jest zalogowane |
+| `amazon_login`, `amazon_login_complete`, `amazon_logout` | Logowanie (start + dokończenie adresem przekierowania) i wylogowanie konta Amazon |
+| `amazon_library`, `amazon_sync` | Biblioteka Amazon Games (z cache / wymuszona synchronizacja) |
+| `amazon_install_nile` | Instalacja `nile` przez winget (przycisk w zakładce Prime Gaming) |
+| `pick_amazon_dir` | Wybór folderu instalacji dla gry Amazon |
+| `amazon_install`, `amazon_launch` | Pobranie/instalacja i uruchomienie gry Amazon |
 | `get_settings`, `set_language`, `set_theme` | Ustawienia aplikacji |
 | `detect_os` | System i architektura |
 
 Zdarzenia emitowane do frontendu: `auth:changed`, `auth:error`, `library:page`,
-`download:progress`, `download:state`.
+`download:progress`, `download:state`, `amazon:progress`, `amazon:done`.
 
 ## Ograniczenia
 
@@ -147,6 +163,9 @@ Zdarzenia emitowane do frontendu: `auth:changed`, `auth:error`, `library:page`,
   uda, trzeba zalogować się ponownie.
 - Każdy plik instalatora jest dodawany do kolejki osobno.
 - Aplikacja korzysta z nieoficjalnego, prywatnego API GOG — może przestać działać, jeśli GOG je zmieni.
+- Amazon Games działa tylko przez `nile` (Amazon nie ma publicznego API). Wymagane jest konto
+  Amazon z grami w kliencie Amazon Games; gry dostępne wyłącznie jako klucze do innych sklepów
+  nie są tu obsługiwane. Część tytułów wymaga usług Amazona do uruchomienia.
 
 ## Licencja
 
