@@ -175,13 +175,13 @@ pub fn parse_code_from_url(url: &str) -> Option<String> {
 
 // ========== OKNO LOGOWANIA ==========
 
-pub fn open_login_window(
-    app: &AppHandle,
-    http: &reqwest::Client,
-    on_token: impl Fn(GogToken) + Send + Sync + 'static,
-) -> tauri::Result<()> {
-    if app.webview_windows().values().any(|w| w.label() == "gog-login") { return Ok(()); }
+type TokenCallback = Arc<dyn Fn(GogToken) + Send + Sync>;
 
+fn login_window_open(app: &AppHandle) -> bool {
+    app.webview_windows().values().any(|w| w.label() == "gog-login")
+}
+
+fn login_url() -> url::Url {
     let mut b = String::new();
     url::form_urlencoded::Serializer::new(&mut b)
         .append_pair("client_id", CLIENT_ID)
@@ -189,28 +189,61 @@ pub fn open_login_window(
         .append_pair("response_type", "code")
         .append_pair("layout", "client2")
         .finish();
-    let url = format!("{}?{}", AUTH_URL, b).parse::<url::Url>().expect("URL");
+    format!("{}?{}", AUTH_URL, b).parse::<url::Url>().expect("URL")
+}
 
-    let http2 = http.clone();
-    let cb = Arc::new(on_token);
-    let app2 = app.clone();
+pub fn open_login_window(
+    app: &AppHandle,
+    http: &reqwest::Client,
+    on_token: impl Fn(GogToken) + Send + Sync + 'static,
+) -> tauri::Result<()> {
+    if login_window_open(app) { return Ok(()); }
 
+    let url = login_url();
+    let handle = app.clone();
+    let http = http.clone();
+    let on_token: TokenCallback = Arc::new(on_token);
+
+    // WebView2 nie da się utworzyć w trakcie obsługi IPC: `build()` wisi wtedy bez
+    // końca, a okno zostaje białe (`about:blank`, bez nawigacji). Wątek roboczy
+    // tylko kolejkuje zadanie na wątek główny, więc okno powstaje już po powrocie
+    // z komendy.
+    std::thread::spawn(move || {
+        let inner = handle.clone();
+        if let Err(e) = handle.run_on_main_thread(move || {
+            if login_window_open(&inner) { return; }
+            if let Err(e) = build_login_window(&inner, url, http, on_token) {
+                log::error!("Nie udało się otworzyć okna logowania: {e}");
+            }
+        }) {
+            log::error!("Nie udało się zlecić otwarcia okna logowania: {e}");
+        }
+    });
+    Ok(())
+}
+
+fn build_login_window(
+    app: &AppHandle,
+    url: url::Url,
+    http: reqwest::Client,
+    on_token: TokenCallback,
+) -> tauri::Result<()> {
+    let app_cb = app.clone();
     WebviewWindowBuilder::new(app, "gog-login", WebviewUrl::External(url))
         .title("Logowanie do GOG.com").inner_size(950.0, 720.0).resizable(false)
         .on_navigation(move |url| {
             let u = url.as_str();
             if !u.starts_with("https://embed.gog.com/on_login_success") { return true; }
-            let code = parse_code_from_url(u);
-            if code.is_none() { return true; }
+            let Some(code) = parse_code_from_url(u) else { return true; };
             // Mamy kod — zatrzymaj nawigacje do bialej strony
-            let h2 = http2.clone();
-            let cb2 = cb.clone();
-            let app3 = app2.clone();
+            let h2 = http.clone();
+            let cb2 = on_token.clone();
+            let app2 = app_cb.clone();
             tauri::async_runtime::spawn(async move {
-                match exchange_code(code.unwrap(), &h2).await {
+                match exchange_code(code, &h2).await {
                     Ok(token) => {
                         // Zamknij okno logowania
-                        if let Some(win) = app3.get_webview_window("gog-login") {
+                        if let Some(win) = app2.get_webview_window("gog-login") {
                             let _ = win.close();
                         }
                         cb2(token);
@@ -218,13 +251,13 @@ pub fn open_login_window(
                     Err(e) => {
                         // Nie połykaj błędu — poinformuj UI i loguj.
                         log::error!("Wymiana kodu na token nieudana: {e}");
-                        let _ = app3.emit("auth:error", serde_json::json!({
+                        let _ = app2.emit("auth:error", serde_json::json!({
                             "message": e.to_string()
                         }));
                     }
                 }
             });
-            return false; // Nie laduj bialej strony
+            false // Nie laduj bialej strony
         })
         .build()?;
     Ok(())
