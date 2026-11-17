@@ -1,0 +1,153 @@
+# goglite
+
+[Polski](README.md) · **English**
+
+A small desktop app (Tauri 2 + Rust) for browsing your **GOG.com** library and downloading offline
+installers. Sign in through a GOG window, sync the library and pull installer files to disk —
+no Galaxy client required.
+
+![Library — dark theme](docs/screenshots/library-dark.png)
+
+*Screenshots come from the UI preview without a signed-in GOG account, so the library and the
+download queue are empty.*
+
+## Features
+
+- **GOG sign-in** in a separate window (OAuth 2.0 authorization code flow) with token refresh.
+- **Game library** with covers, genre, release date and supported platforms.
+- **Search** and a **platform filter** (All / Windows / Linux / macOS).
+- **Game details**: description, developers, publishers, genres, screenshots with a zoom viewer.
+- **Installers** per game, filtered by operating system; download queue with progress, pause
+  and cancel.
+- **Two themes** (dark/light) and **two languages** (Polish/English) — applied instantly and
+  stored in settings.
+- **Download folder picker**.
+
+## Screenshots
+
+| Library (light) | Downloads |
+| --- | --- |
+| ![Library — light theme](docs/screenshots/library-light.png) | ![Downloads](docs/screenshots/downloads-dark.png) |
+
+| Settings (dark) | Settings (light) |
+| --- | --- |
+| ![Settings — dark theme](docs/screenshots/settings-dark.png) | ![Settings — light theme](docs/screenshots/settings-light.png) |
+
+## Requirements
+
+- **Node.js** ≥ 20 and **Rust** ≥ 1.75 ([rustup](https://rustup.rs))
+- **Windows:** MSVC Build Tools and WebView2 (preinstalled on Windows 10/11)
+- **Linux:** `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`,
+  `build-essential`
+- **macOS:** Xcode Command Line Tools
+
+## Running
+
+```bash
+npm install
+npm run tauri dev
+```
+
+`npm run dev` alone only serves the frontend in a browser (Vite, port 1420) — without the Rust
+backend there is no sign-in, library or downloading.
+
+## Building
+
+```bash
+npm run tauri build
+```
+
+Artifacts land in `src-tauri/target/release/bundle/`:
+
+- **Windows** — `msi/goglite_0.1.0_x64_en-US.msi` and `nsis/goglite_0.1.0_x64-setup.exe`
+- **Linux** — AppImage and `.deb` (requires the GTK/WebKit packages listed above)
+
+## How sign-in works
+
+1. **Sign in with GOG** calls the `login_via_www` command, which opens a dedicated window at
+   `https://auth.gog.com/auth?...&response_type=code&layout=client2`.
+2. After signing in, GOG redirects to `https://embed.gog.com/on_login_success?origin=client&code=…`.
+   The app intercepts that navigation, closes the window and never loads the blank page.
+3. The authorization code is exchanged for a token at `https://auth.gog.com/token`
+   (the GOG Galaxy `client_secret` is required).
+4. The token and `refresh_token` are stored in `auth.json`, which gets `600` permissions on Unix.
+   The token is refreshed before it expires (60 s margin).
+
+> The sign-in window is created on the event loop from a worker thread. Creating WebView2 while
+> handling an IPC call made `build()` hang and left the window blank.
+
+## Data on disk
+
+Application data directory (`dirs::data_dir()/goglite`):
+
+| OS | Path |
+| --- | --- |
+| Windows | `%APPDATA%\goglite\` |
+| Linux | `~/.local/share/goglite/` |
+| macOS | `~/Library/Application Support/goglite/` |
+
+Files: `goglite.db` (SQLite), `auth.json`, `settings.json`.
+
+Downloads go to the system *Downloads* folder by default. It can be changed in **Settings**;
+the `GOGLITE_DOWNLOAD_DIR` environment variable takes precedence over the stored setting.
+
+## Project layout
+
+```
+goglite/
+├── index.html                  # UI shell
+├── vite.config.js              # Vite (port 1420)
+├── src/
+│   ├── main.js                 # UI logic: invoke, listen, render
+│   ├── i18n.js                 # PL/EN dictionaries
+│   ├── styles.css              # Dark/light themes (CSS variables)
+│   └── fonts/                  # Archivo + Geist Mono (local, offline)
+├── src-tauri/
+│   ├── tauri.conf.json         # Window, bundle, icons
+│   ├── sql/schema.sql          # SQLite schema
+│   └── src/
+│       ├── main.rs             # Entry point
+│       ├── lib.rs              # Tauri init, app state
+│       ├── auth.rs             # OAuth, token, sign-in window
+│       ├── gog.rs              # GOG API client
+│       ├── db.rs               # SQLite operations
+│       ├── downloads.rs        # Download manager
+│       ├── settings.rs         # Persisted settings
+│       ├── platform.rs         # OS detection
+│       ├── commands.rs         # IPC commands
+│       └── error.rs            # Error types
+├── scripts/gen_icon.py         # Icon generator
+└── docs/screenshots/           # README screenshots
+```
+
+## IPC commands
+
+| Command | Description |
+| --- | --- |
+| `get_auth_status` | Whether the user is signed in |
+| `login_via_www` | Opens the GOG sign-in window |
+| `logout` | Clears the stored token |
+| `sync_library` | Fetches the GOG library and stores it locally |
+| `get_games` | Games from the local database |
+| `get_installers` | Installers for a game |
+| `get_game_details` | Description, developers, publishers, genres, screenshots |
+| `start_download` | Queues an installer |
+| `pause_download`, `cancel_download` | Pause / cancel a download |
+| `get_downloads` | Download queue and history |
+| `get_download_dir`, `pick_download_dir` | Read and choose the download folder |
+| `get_settings`, `set_language`, `set_theme` | Application settings |
+| `detect_os` | OS and architecture |
+
+Events emitted to the frontend: `auth:changed`, `auth:error`, `library:page`,
+`download:progress`, `download:state`.
+
+## Limitations
+
+- GOG tokens expire after about an hour; the app refreshes them with the refresh token, and when
+  that fails you have to sign in again.
+- Every installer file is queued separately.
+- The app relies on GOG's unofficial private API, so it may break if GOG changes it.
+
+## License
+
+MIT. An educational project, not affiliated with GOG.com or CD Projekt.

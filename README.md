@@ -1,185 +1,153 @@
-# goglite — pobierarka instalatorów offline GOG
+# goglite
 
-Lekka, wieloplatformowa aplikacja desktopowa do logowania do **GOG.com**, przeglądania biblioteki i pobierania instalatorów offline.
+**Polski** · [English](README.en.md)
 
-**Stos:** Tauri 2 · Rust · SQLite · Vanilla JS · Vite
+Lekka aplikacja desktopowa (Tauri 2 + Rust) do przeglądania biblioteki **GOG.com** i pobierania
+instalatorów offline. Logujesz się przez okno GOG, synchronizujesz bibliotekę i ściągasz pliki
+instalacyjne na dysk — bez klienta Galaxy.
 
----
+![Biblioteka — motyw ciemny](docs/screenshots/library-dark.png)
 
-## 🚀 Szybki start
+*Zrzuty ekranu pochodzą z podglądu interfejsu bez zalogowanego konta GOG, dlatego biblioteka
+i kolejka pobrań są puste.*
 
-### 1. Wymagania systemowe
+## Funkcje
 
-| Składnik | Linux (Ubuntu/Debian) | Windows |
-|----------|-----------------------|---------|
-| **Node.js** | ≥ 20 | ≥ 20 |
-| **Rust** | ≥ 1.75 ([rustup](https://rustup.rs)) | ≥ 1.75 |
-| **GTK/Tauri** | `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev` | — |
-| **C++** | `sudo apt install build-essential` | MSVC Build Tools |
+- **Logowanie przez GOG** w osobnym oknie (OAuth 2.0, Authorization Code) z odświeżaniem tokenu.
+- **Biblioteka gier** z okładkami, gatunkiem, datą premiery i platformami.
+- **Wyszukiwarka** i **filtr platformy** (Wszystkie / Windows / Linux / macOS).
+- **Szczegóły gry**: opis, producent, wydawca, gatunki, zrzuty ekranu (podgląd w powiększeniu).
+- **Instalatory** per gra, filtrowane po systemie; kolejka pobrań z postępem, wstrzymywaniem
+  i anulowaniem.
+- **Dwa motywy** (ciemny/jasny) i **dwa języki** (polski/angielski) — zmiana natychmiastowa,
+  zapisywana w ustawieniach.
+- **Wybór folderu zapisu** instalatorów.
 
-### 2. Instalacja
+## Zrzuty ekranu
+
+| Biblioteka (jasny) | Pobierania |
+| --- | --- |
+| ![Biblioteka — motyw jasny](docs/screenshots/library-light.png) | ![Pobierania](docs/screenshots/downloads-dark.png) |
+
+| Ustawienia (ciemny) | Ustawienia (jasny) |
+| --- | --- |
+| ![Ustawienia — motyw ciemny](docs/screenshots/settings-dark.png) | ![Ustawienia — motyw jasny](docs/screenshots/settings-light.png) |
+
+## Wymagania
+
+- **Node.js** ≥ 20 i **Rust** ≥ 1.75 ([rustup](https://rustup.rs))
+- **Windows:** MSVC Build Tools oraz WebView2 (w Windows 10/11 jest domyślnie)
+- **Linux:** `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`,
+  `build-essential`
+- **macOS:** Xcode Command Line Tools
+
+## Uruchomienie
 
 ```bash
-git clone https://github.com/twoje/goglite.git
-cd goglite
 npm install
-```
-
-### 3. Uruchomienie (tryb deweloperski)
-
-```bash
 npm run tauri dev
 ```
 
-### 4. Budowanie pliku binarnego
+Sam `npm run dev` uruchamia tylko frontend w przeglądarce (Vite, port 1420) — bez backendu Rust
+nie ma logowania, biblioteki ani pobierań.
+
+## Budowanie
 
 ```bash
 npm run tauri build
 ```
 
-Pliki wynikowe: `src-tauri/target/release/bundle/`
+Artefakty trafiają do `src-tauri/target/release/bundle/`:
 
----
+- **Windows** — `msi/goglite_0.1.0_x64_en-US.msi` oraz `nsis/goglite_0.1.0_x64-setup.exe`
+- **Linux** — AppImage i `.deb` (wymagają zależności GTK/WebKit wymienionych wyżej)
 
-## 🗂 Struktura projektu
+## Jak działa logowanie
+
+1. Przycisk **Zaloguj przez GOG** wywołuje komendę `login_via_www`, która otwiera osobne okno
+   z `https://auth.gog.com/auth?...&response_type=code&layout=client2`.
+2. Po zalogowaniu GOG przekierowuje na `https://embed.gog.com/on_login_success?origin=client&code=…`.
+   Aplikacja przechwytuje tę nawigację, zamyka okno i nie ładuje białej strony.
+3. Kod autoryzacyjny jest wymieniany na token pod `https://auth.gog.com/token`
+   (wymagany `client_secret` klienta GOG Galaxy).
+4. Token i `refresh_token` lądują w `auth.json`; na Unixie plik dostaje uprawnienia `600`.
+   Token jest odświeżany, zanim wygaśnie (margines 60 s).
+
+> Okno logowania jest tworzone na pętli zdarzeń z osobnego wątku. Utworzenie WebView2 w trakcie
+> obsługi IPC zawieszało `build()` i dawało białe okno.
+
+## Dane na dysku
+
+Katalog danych aplikacji (`dirs::data_dir()/goglite`):
+
+| System | Ścieżka |
+| --- | --- |
+| Windows | `%APPDATA%\goglite\` |
+| Linux | `~/.local/share/goglite/` |
+| macOS | `~/Library/Application Support/goglite/` |
+
+Pliki: `goglite.db` (SQLite), `auth.json`, `settings.json`.
+
+Domyślny folder pobrań to systemowy katalog „Pobrane”. Można go zmienić w **Ustawieniach**;
+zmienna środowiskowa `GOGLITE_DOWNLOAD_DIR` ma pierwszeństwo przed zapisanym ustawieniem.
+
+## Struktura projektu
 
 ```
 goglite/
-├── package.json                 # Zależności frontendowe
-├── vite.config.js               # Konfiguracja Vite
-├── index.html                   # Główny plik HTML
-├── src/                         # Frontend (Vanilla JS + CSS)
-│   ├── main.js                  # Logika UI (invoke, listen, render)
-│   ├── i18n.js                  # Słowniki PL/EN + mechanizm tłumaczeń
-│   └── styles.css               # Motywy jasny/ciemny (zmienne CSS), sidebar, siatka, panel pobierań
-├── src-tauri/                   # Backend (Rust)
-│   ├── Cargo.toml               # Zależności Rust
-│   ├── tauri.conf.json          # Konfiguracja okna, bundle
----
-
-## 🔐 Uwierzytelnianie
-
-OAuth 2.0 Implicit Grant z `client_id` GOG Galaxy (`46899917096242505`).
-
-1. Klik "Zaloguj" → okno z `auth.gog.com/auth?...`
-2. Po zalogowaniu GOG przekierowuje → `embed.gog.com/on_login_success#access_token=...`
-3. Backend przechwytuje nawigację, wyciąga token, zamyka okno.
-4. Token zapisany w `~/.local/share/goglite/auth.json` (`chmod 600`).
-
-## 📡 API GOG
-
-| Endpoint | Cel |
-|----------|-----|
-| `GET embed.gog.com/account/getFilteredProducts` | Lista gier (tytuł, okładka, **gatunek `category`**, data premiery, **platformy `worksOn`**) |
-| `GET api.gog.com/products/{id}?expand=downloads` | Instalatory + pliki |
-| `GET files[].downlink` (`api.gog.com/products/{id}/downlink/installer/…`) | JSON `{ downlink, checksum }` z linkiem do CDN |
-| `GET <downlink>` z tego JSON | Plik instalatora (CDN, obsługuje `Accept-Ranges`) |
-| `GET api.gog.com/v2/games/{id}` | **Opis, producenci, wydawcy, gatunki, zrzuty ekranu** (publiczny — bez tokena) |
-
-Wymaga `Authorization: Bearer <token>` (poza `api.gog.com/v2/games/{id}`, które jest publiczne).
-
-## 🗄 Schemat SQLite
-
-```sql
-games (id INTEGER PK, title, slug, image_url, icon_url, genre, release_date,
-       developers, publishers, platforms, last_synced_at)
-downloads (id INTEGER PK, game_id FK, installer_id, filename, url,
-           target_path, total_bytes, downloaded_bytes, status,
-           error, created_at, updated_at)
-UNIQUE (game_id, installer_id, filename)
-```
-
-## ⚙️ Komendy IPC (Rust ↔ JS)
-
-| Komenda | Parametry | Zwraca |
-|---------|-----------|--------|
-| `get_auth_status` | — | `{ loggedIn }` |
-| `login` | — | — (okno OAuth) |
-| `logout` | — | — |
-| `sync_library` | — | `GameRow[]` |
-| `get_games` | — | `GameRow[]` |
-| `get_installers` | `{ gameId }` | `Installer[]` |
-| `get_game_details` | `{ gameId, language? }` | `{ description, developers, publishers, genres, screenshots }` |
-| `start_download` | `{ gameId, installerId }` | `DownloadRow[]` |
-| `pause_download` | `{ downloadId }` | — |
-| `cancel_download` | `{ downloadId }` | — |
-| `get_downloads` | — | `DownloadRow[]` |
-| `get_download_dir` | — | `string` |
-| `pick_download_dir` | — | `string \| null` |
-| `get_settings` | — | `{ downloadDir, language, theme }` |
-| `set_language` | `{ language }` | — |
-| `set_theme` | `{ theme }` | — |
-| `detect_os` | — | `{ os, arch }` |
-
-Zdarzenia: `auth:changed`, `library:page`, `library:synced`, `download:progress`, `download:state`.
-
-## 🖥 Filtr platformy (Windows / Linux / macOS)
-
-Aplikacja pozwala szybko zobaczyć, **co można zainstalować na jakim systemie**:
-
-- **Biblioteka** — pasek filtrów `Wszystkie / Windows / Linux / macOS`. Kafle gier pokazują znaczniki
-  platform (`Win` / `Lin` / `Mac`) na podstawie danych z API GOG (`worksOn` / `supportedOperatingSystems`).
-  Filtr łączy się z wyszukiwarką. Przy starcie domyślnie zaznaczana jest platforma bieżącego systemu.
-- **Modal gry → zakładka „Instalatory”** — pasek filtrów filtruje i sortuje listę instalatorów wg systemu
-  (Windows → Linux → macOS), na podstawie pola `os` każdego instalatora.
-
-Jeśli API biblioteki nie zwróci informacji o platformach, filtr platformy w siatce jest automatycznie
-pomijany (pokazywane są wszystkie gry), a filtrowanie pozostaje dostępne w modalu gry.
-
-## 🌍 Wielojęzyczność (PL / EN)
-
-Interfejs obsługuje polski i angielski. Tłumaczenia znajdują się w `src/i18n.js` (słowniki `pl`/`en`),
-a statyczne teksty w `index.html` są oznaczone atrybutami `data-i18n` / `data-i18n-placeholder` / `data-i18n-title`.
-Wybór języka zapisywany jest w `settings.json` (komenda `set_language`); przy pierwszym uruchomieniu
-wykrywany jest język systemu. Zmiana następuje natychmiast, bez restartu.
-
-## 🎨 Motywy (jasny / ciemny)
-
-Interfejs obsługuje dwa motywy przełączane w ekranie **Ustawienia → Motyw**. Motyw zmieniany jest
-atrybutem `data-theme` (`dark` / `light`) na elemencie `<html>`, a palety zdefiniowane są jako zmienne
-CSS (`:root` = motyw ciemny, `html[data-theme="light"]` = motyw jasny).
-
-- **Ciemny (domyślny)** — bazuje na fioletowym `#800080` w wielu odcieniach (tła, akcenty, obramowania).
-- **Jasny** — jasne tła z fioletowym akcentem `#800080`.
-
-Wybór zapisywany jest w `settings.json` (komenda `set_theme`) i stosowany natychmiast, bez restartu.
-
-## 🖥 Interfejs
-
-Layout wzorowany na **GOG Galaxy 2.0**: pionowy **sidebar** (Biblioteka / Pobierania / Ustawienia +
-sekcja konta), **topbar** z wyszukiwarką biblioteki, siatka okładek gier oraz modal szczegółów gry
-z dużym banerem (hero). Ekran **Ustawienia** zawiera przełącznik języka, wybór motywu
-(jasny/ciemny) oraz wybór folderu pobrań.
-
-## 🐧 Wieloplatformowość
-
-- **Ścieżki:** `dirs::data_dir()` / `dirs::download_dir()`
-- **HTTP:** `reqwest` + `rustls` (bez OpenSSL)
-- **Baza:** SQLite `bundled` (WAL, bezpieczne prepared statements)
-- **Token:** chmod 600 na Unix
-- **Testowane:** Ubuntu 24.04, Windows 10/11
-
-## ⚠️ Ograniczenia
-
-- Token GOG wygasa ~1h → 401 → ponowne logowanie
-- Każdy plik instalatora enqueuowany osobno
-- Ikona zastępcza — zastąp przed bundlowaniem
-
----
-
-*Projekt edukacyjny, niepowiązany z GOG.com / CD Projekt.*
-│   ├── capabilities/default.json # Uprawnienia IPC
-│   ├── sql/schema.sql           # Schemat SQLite (games, downloads)
-│   ├── icons/icon.png           # Ikona (256×256)
+├── index.html                  # Szkielet interfejsu
+├── vite.config.js              # Vite (port 1420)
+├── src/
+│   ├── main.js                 # Logika UI: invoke, listen, render
+│   ├── i18n.js                 # Słowniki PL/EN
+│   ├── styles.css              # Motywy ciemny/jasny (zmienne CSS)
+│   └── fonts/                  # Archivo + Geist Mono (lokalnie, offline)
+├── src-tauri/
+│   ├── tauri.conf.json         # Okno, bundle, ikony
+│   ├── sql/schema.sql          # Schemat SQLite
 │   └── src/
-│       ├── main.rs              # Punkt wejścia
-│       ├── lib.rs               # init Tauri, stan
-│       ├── error.rs             # Typy błędów
-│       ├── db.rs                # SQLite ops
-│       ├── auth.rs              # OAuth, token, okno logowania
-│       ├── gog.rs               # Klient API GOG
-│       ├── downloads.rs         # Menedżer pobierania
-│       ├── platform.rs          # Wykrywanie systemu (Windows/Linux/macOS)
-│       └── commands.rs          # Komendy IPC
-└── scripts/gen_icon.py          # Generator ikony PNG
+│       ├── main.rs             # Punkt wejścia
+│       ├── lib.rs              # Init Tauri, stan aplikacji
+│       ├── auth.rs             # OAuth, token, okno logowania
+│       ├── gog.rs              # Klient API GOG
+│       ├── db.rs               # Operacje SQLite
+│       ├── downloads.rs        # Menedżer pobierania
+│       ├── settings.rs         # Trwałe ustawienia
+│       ├── platform.rs         # Wykrywanie systemu
+│       ├── commands.rs         # Komendy IPC
+│       └── error.rs            # Typy błędów
+├── scripts/gen_icon.py         # Generator ikony
+└── docs/screenshots/           # Zrzuty do README
 ```
+
+## Komendy IPC
+
+| Komenda | Opis |
+| --- | --- |
+| `get_auth_status` | Czy użytkownik jest zalogowany |
+| `login_via_www` | Otwiera okno logowania GOG |
+| `logout` | Usuwa zapisany token |
+| `sync_library` | Pobiera bibliotekę z GOG i zapisuje ją w bazie |
+| `get_games` | Lista gier z bazy |
+| `get_installers` | Instalatory wybranej gry |
+| `get_game_details` | Opis, producent, wydawca, gatunki, zrzuty |
+| `start_download` | Dodaje instalator do kolejki |
+| `pause_download`, `cancel_download` | Wstrzymuje / anuluje pobieranie |
+| `get_downloads` | Kolejka i historia pobrań |
+| `get_download_dir`, `pick_download_dir` | Odczyt i wybór folderu zapisu |
+| `get_settings`, `set_language`, `set_theme` | Ustawienia aplikacji |
+| `detect_os` | System i architektura |
+
+Zdarzenia emitowane do frontendu: `auth:changed`, `auth:error`, `library:page`,
+`download:progress`, `download:state`.
+
+## Ograniczenia
+
+- Token GOG wygasa po około godzinie; aplikacja odświeża go tokenem odświeżania, a gdy to się nie
+  uda, trzeba zalogować się ponownie.
+- Każdy plik instalatora jest dodawany do kolejki osobno.
+- Aplikacja korzysta z nieoficjalnego, prywatnego API GOG — może przestać działać, jeśli GOG je zmieni.
+
+## Licencja
+
+MIT. Projekt edukacyjny, niepowiązany z GOG.com ani CD Projekt.
