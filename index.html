@@ -8,26 +8,30 @@
 </head>
 <body>
   <div id="app-shell">
-    <!-- ============ SIDEBAR (nawigacja w stylu GOG Galaxy) ============ -->
+    <!-- ============ SIDEBAR ============ -->
     <aside id="sidebar">
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">▚</span>
         <span class="brand-name">goglite</span>
       </div>
+      <p class="brand-sub" data-i18n="app.tagline">Menedżer instalatorów offline</p>
 
       <nav class="side-nav">
         <button id="nav-games" class="nav-item active">
-          <span class="nav-ico" aria-hidden="true">▦</span>
+          <span class="nav-idx">01</span>
           <span class="nav-label" data-i18n="nav.library">Biblioteka</span>
+          <span class="nav-mark" aria-hidden="true"></span>
         </button>
         <button id="nav-downloads" class="nav-item">
-          <span class="nav-ico" aria-hidden="true">↓</span>
+          <span class="nav-idx">02</span>
           <span class="nav-label" data-i18n="nav.downloads">Pobierania</span>
           <span id="dl-badge" class="badge hidden">0</span>
+          <span class="nav-mark" aria-hidden="true"></span>
         </button>
         <button id="nav-settings" class="nav-item">
-          <span class="nav-ico" aria-hidden="true">⚙</span>
+          <span class="nav-idx">03</span>
           <span class="nav-label" data-i18n="nav.settings">Ustawienia</span>
+          <span class="nav-mark" aria-hidden="true"></span>
         </button>
       </nav>
 
@@ -37,6 +41,7 @@
           <span id="status-badge" class="badge hidden"></span>
           <button id="btn-logout" class="btn btn-small hidden" data-i18n="action.logout">Wyloguj</button>
         </div>
+        <p class="side-meta">GOG.com · v0.1.0</p>
       </div>
     </aside>
 
@@ -44,11 +49,12 @@
     <div id="main-col">
       <header id="topbar">
         <div class="search-box">
-          <span class="search-ico" aria-hidden="true">🔍</span>
+          <span class="search-ico" aria-hidden="true">⌕</span>
           <input id="search-input" type="search" autocomplete="off"
                  data-i18n-placeholder="topbar.search" placeholder="Szukaj w bibliotece…" />
         </div>
         <div class="topbar-actions">
+          <span class="topbar-hud">goglite / catalog</span>
           <button id="btn-settings" class="icon-btn" data-i18n-title="nav.settings"
                   title="Ustawienia" aria-label="Ustawienia">⚙</button>
         </div>
@@ -56,8 +62,15 @@
 
       <main id="content">
         <section id="view-games" class="view active">
-          <div id="welcome">
-            <h2 data-i18n="welcome.title">Witaj w goglite</h2>
+          <header class="view-head">
+            <p class="eyebrow"><span class="eyebrow-num">01</span><span class="eyebrow-sep">/</span><span data-i18n="hud.library">Biblioteka</span></p>
+            <h2 class="view-title" data-i18n="library.title">Moja biblioteka.</h2>
+            <p class="view-sub" data-i18n="library.sub">Instalatory offline z GOG.com. Wybierz grę, aby zobaczyć pliki.</p>
+          </header>
+
+          <div id="welcome" class="welcome">
+            <p class="eyebrow"><span class="eyebrow-num">00</span><span class="eyebrow-sep">/</span><span data-i18n="hud.auth">Dostęp</span></p>
+            <h3 class="welcome-title" data-i18n="welcome.title">Witaj w goglite</h3>
             <p data-i18n="welcome.desc1">Lekki menedżer pobierania instalatorów offline z GOG.com.</p>
             <p data-i18n="welcome.desc2">Zaloguj się przez okno GOG, a następnie zsynchronizuj bibliotekę.</p>
             <button id="btn-login" class="btn btn-primary btn-large" data-i18n="welcome.login">Zaloguj przez GOG</button>
@@ -65,14 +78,17 @@
           </div>
 
           <div id="sync-progress" class="sync-bar hidden">
-            <span class="sync-bar-label" data-i18n="sync.syncing">Synchronizowanie biblioteki…</span>
+            <div class="sync-bar-top">
+              <span class="sync-bar-label" data-i18n="sync.syncing">Synchronizowanie biblioteki…</span>
+              <span class="sync-bar-hud">SYNC</span>
+            </div>
             <progress id="sync-progress-bar" max="100" value="0"></progress>
           </div>
 
           <section id="game-section" class="hidden">
             <div class="section-header">
-              <h2 data-i18n="library.title">Moja biblioteka</h2>
-              <span id="game-count" class="badge"></span>
+              <p class="eyebrow"><span class="eyebrow-num">02</span><span class="eyebrow-sep">/</span><span data-i18n="hud.catalog">Katalog</span></p>
+              <span class="count"><span id="game-count"></span> <span data-i18n="library.countLabel">pozycji</span></span>
             </div>
             <div class="platform-filter" id="platform-filter">
               <button class="chip active" data-platform="all" data-i18n="filter.all">Wszystkie</button>
@@ -86,18 +102,27 @@
         </section>
 
         <section id="view-downloads" class="view">
-          <div class="section-header">
-            <h2 data-i18n="downloads.title">Pobierania</h2>
-            <div class="dl-toolbar">
-              <span id="dl-dir-label" class="path-chip" title=""></span>
-              <button id="btn-dl-settings" class="btn btn-small" data-i18n="downloads.changeInSettings">Zmień w ustawieniach</button>
+          <header class="view-head">
+            <p class="eyebrow"><span class="eyebrow-num">02</span><span class="eyebrow-sep">/</span><span data-i18n="hud.downloads">Pobierania</span></p>
+            <div class="view-head-row">
+              <h2 class="view-title" data-i18n="downloads.title">Pobierania</h2>
+              <div class="dl-toolbar">
+                <span id="dl-dir-label" class="path-chip" title=""></span>
+                <button id="btn-dl-settings" class="btn btn-small" data-i18n="downloads.changeInSettings">Zmień w ustawieniach</button>
+              </div>
             </div>
-          </div>
+            <p class="view-sub" data-i18n="downloads.sub">Kolejka i historia pobrań instalatorów.</p>
+          </header>
           <div id="download-list" class="download-list"></div>
         </section>
 
         <section id="view-settings" class="view">
-          <div class="section-header"><h2 data-i18n="settings.title">Ustawienia</h2></div>
+          <header class="view-head">
+            <p class="eyebrow"><span class="eyebrow-num">03</span><span class="eyebrow-sep">/</span><span data-i18n="hud.settings">Konfiguracja</span></p>
+            <h2 class="view-title" data-i18n="settings.title">Ustawienia</h2>
+            <p class="view-sub" data-i18n="settings.sub">Język, wygląd i miejsce zapisu instalatorów.</p>
+          </header>
+
           <div class="settings-card">
             <div class="settings-row">
               <div class="settings-label">
@@ -153,7 +178,10 @@
         <img class="modal-hero-img" id="modal-hero-img" alt="" />
         <div class="modal-hero-grad"></div>
         <button id="btn-close-modal" class="btn close-btn modal-close">&times;</button>
-        <div class="modal-hero-text"><h2 id="modal-title">---</h2></div>
+        <div class="modal-hero-text">
+          <p class="eyebrow eyebrow-light"><span class="eyebrow-num">01</span><span class="eyebrow-sep">/</span><span data-i18n="hud.game">Gra</span></p>
+          <h2 id="modal-title">---</h2>
+        </div>
       </div>
       <div class="modal-tabs" id="modal-tabs" role="tablist">
         <button class="modal-tab active" data-tab="info" role="tab" data-i18n="modal.tabDescription">Opis</button>
