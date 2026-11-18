@@ -541,6 +541,15 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Sklep, z którego pochodzi pobranie (Prime Gaming / Epic). */
+.dl-store {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: .54rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
 .dl-status {
   margin-left: auto;
   display: inline-flex;

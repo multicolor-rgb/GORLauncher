@@ -3,9 +3,11 @@
 
 mod auth;
 mod amazon;
+mod cli;
 mod commands;
 mod db;
 mod downloads;
+mod epic;
 mod error;
 mod gog;
 mod platform;
@@ -111,6 +113,16 @@ pub fn run() {
             amazon::pick_amazon_dir,
             amazon::amazon_install,
             amazon::amazon_launch,
+            epic::epic_status,
+            epic::epic_login,
+            epic::epic_login_complete,
+            epic::epic_logout,
+            epic::epic_library,
+            epic::epic_sync,
+            epic::epic_install_legendary,
+            epic::pick_epic_dir,
+            epic::epic_install,
+            epic::epic_launch,
             commands::get_settings,
             commands::set_language,
             commands::set_theme,

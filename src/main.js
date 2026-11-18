@@ -51,8 +51,21 @@ const d = {
   amazonLoginFinishBtn: $("#btn-amazon-login-finish"), amazonLoginCancelBtn: $("#btn-amazon-login-cancel"),
   amazonLoginError: $("#amazon-login-error"),
   amazonEmpty: $("#amazon-empty"), amazonGrid: $("#amazon-grid"),
-  // Pobrania Amazon pokazujemy w zakładce Pobierania, nad pobraniami GOG.
-  dlAmazon: $("#dl-amazon"),
+  // Pobrania sklepów (Prime Gaming + Epic) pokazujemy w zakładce Pobierania, nad pobraniami GOG.
+  dlStores: $("#dl-stores"),
+  // Epic Games
+  navEpic: $("#nav-epic"), viewEpic: $("#view-epic"),
+  epicSetup: $("#epic-setup"), epicSetupMsg: $("#epic-setup-msg"),
+  epicCopyBtn: $("#btn-epic-copy"), epicRetryBtn: $("#btn-epic-retry"),
+  epicInstallToolBtn: $("#btn-epic-install-tool"), epicSetupError: $("#epic-setup-error"),
+  epicSetupProgress: $("#epic-setup-progress"),
+  epicBar: $("#epic-bar"), epicUser: $("#epic-user"),
+  epicLoginBtn: $("#btn-epic-login"), epicLogoutBtn: $("#btn-epic-logout"),
+  epicRefreshBtn: $("#btn-epic-refresh"),
+  epicLoginPanel: $("#epic-login-panel"), epicLoginCode: $("#epic-login-code"),
+  epicLoginFinishBtn: $("#btn-epic-login-finish"), epicLoginCancelBtn: $("#btn-epic-login-cancel"),
+  epicLoginError: $("#epic-login-error"),
+  epicEmpty: $("#epic-empty"), epicGrid: $("#epic-grid"),
 };
 
 let loggedIn = false;
@@ -82,6 +95,7 @@ let currentGameId = null;
 const VIEWS = {
   games: { view: d.viewGames, nav: d.navGames },
   amazon: { view: d.viewAmazon, nav: d.navAmazon },
+  epic: { view: d.viewEpic, nav: d.navEpic },
   downloads: { view: d.viewDls, nav: d.navDls },
   settings: { view: d.viewSettings, nav: d.navSettings },
 };
@@ -103,6 +117,7 @@ async function init() {
   d.navGames.addEventListener("click", () => { switchView("games"); loadDownloads(); });
   d.navDls.addEventListener("click", () => { switchView("downloads"); loadDownloads(); });
   d.navAmazon.addEventListener("click", () => { switchView("amazon"); loadAmazon(); });
+  d.navEpic.addEventListener("click", () => { switchView("epic"); loadEpic(); });
   d.navSettings.addEventListener("click", () => switchView("settings"));
   d.topSettingsBtn.addEventListener("click", () => switchView("settings"));
   d.dlSettingsBtn.addEventListener("click", () => switchView("settings"));
@@ -138,6 +153,17 @@ async function init() {
   d.amazonLoginCancelBtn.addEventListener("click", amazonLoginCancel);
   d.amazonLoginUrl.addEventListener("keydown", (e) => { if (e.key === "Enter") amazonLoginFinish(); });
   d.amazonGrid.addEventListener("click", onAmazonGridClick);
+  // Epic Games: logowanie, odświeżanie biblioteki i akcje na kafelkach
+  d.epicLoginBtn.addEventListener("click", epicLogin);
+  d.epicLogoutBtn.addEventListener("click", epicLogout);
+  d.epicRefreshBtn.addEventListener("click", () => loadEpic(true));
+  d.epicRetryBtn.addEventListener("click", () => loadEpic());
+  d.epicCopyBtn.addEventListener("click", epicCopyCommand);
+  d.epicInstallToolBtn.addEventListener("click", epicInstallTool);
+  d.epicLoginFinishBtn.addEventListener("click", epicLoginFinish);
+  d.epicLoginCancelBtn.addEventListener("click", epicLoginCancel);
+  d.epicLoginCode.addEventListener("keydown", (e) => { if (e.key === "Enter") epicLoginFinish(); });
+  d.epicGrid.addEventListener("click", onEpicGridClick);
   // Wyszukiwarka
   d.searchInput.addEventListener("input", () => {
     searchQuery = d.searchInput.value.trim().toLowerCase();
@@ -206,7 +232,7 @@ async function init() {
     if (!a) return;
     if (e.payload.line) a.line = e.payload.line;
     if (e.payload.percent != null) a.percent = e.payload.percent;
-    renderAmazonActive();
+    renderStoreDownloads();
   });
   listen("amazon:done", (e) => {
     const { gameId, ok, error } = e.payload;
@@ -215,7 +241,7 @@ async function init() {
       a.ok = !!ok; a.error = error || "";
       if (ok) a.percent = 100;
     }
-    renderAmazonActive();
+    renderStoreDownloads();
     loadAmazon(false);
   });
   listen("amazon:nile-progress", (e) => {
@@ -223,6 +249,29 @@ async function init() {
     if (!line || !d.amazonSetupProgress) return;
     d.amazonSetupProgress.textContent = line;
     show(d.amazonSetupProgress);
+  });
+  listen("epic:progress", (e) => {
+    const a = epicActive.get(e.payload.gameId);
+    if (!a) return;
+    if (e.payload.line) a.line = e.payload.line;
+    if (e.payload.percent != null) a.percent = e.payload.percent;
+    renderStoreDownloads();
+  });
+  listen("epic:done", (e) => {
+    const { gameId, ok, error } = e.payload;
+    const a = epicActive.get(gameId);
+    if (a) {
+      a.ok = !!ok; a.error = error || "";
+      if (ok) a.percent = 100;
+    }
+    renderStoreDownloads();
+    loadEpic(false);
+  });
+  listen("epic:tool-progress", (e) => {
+    const line = e.payload && e.payload.line;
+    if (!line || !d.epicSetupProgress) return;
+    d.epicSetupProgress.textContent = line;
+    show(d.epicSetupProgress);
   });
 }
 
@@ -233,6 +282,7 @@ function applyLanguage(lang, persist) {
   if (loggedIn) renderGames();
   renderDownloads();
   renderAmazonUi();
+  renderEpicUi();
   setDirLabel(currentDir);
   if (d.modal.open) {
     const loadingEl = d.modalBody.querySelector(".loading");
@@ -765,25 +815,30 @@ function renderAmazonGames() {
  * Lista trwających/zakończonych instalacji Amazon z postępem.
  * Rysowana w zakładce Pobierania (wspólnej z pobraniami GOG), nie w Prime Gaming.
  */
-function renderAmazonActive() {
-  if (!amazonActive.size) {
-    d.dlAmazon.innerHTML = "";
-    hide(d.dlAmazon);
+function renderStoreDownloads() {
+  const rows = [
+    ...[...amazonActive.entries()].map(([id, a]) => ({ id, store: "prime", ...a })),
+    ...[...epicActive.entries()].map(([id, a]) => ({ id, store: "epic", ...a })),
+  ];
+  if (!rows.length) {
+    d.dlStores.innerHTML = "";
+    hide(d.dlStores);
     // Gdy nie ma już żadnych pobrań, przywracamy komunikat o pustej liście.
     if (!dlRows.size) renderDownloads();
     return;
   }
-  show(d.dlAmazon);
-  d.dlAmazon.innerHTML = [...amazonActive.entries()].map(([id, a]) => {
+  show(d.dlStores);
+  d.dlStores.innerHTML = rows.map((a) => {
     const pct = a.percent == null ? null : Math.min(a.percent, 100);
     const cls = a.ok === true ? "completed" : a.ok === false ? "failed" : "active";
     const label = a.ok === true ? t("amazon.done") : a.ok === false ? t("amazon.failed") : t("status.downloading");
+    const store = a.store === "epic" ? t("epic.short") : t("amazon.short");
     const bar = pct == null ? "" :
       `<div class="dl-progress-track"><div class="dl-progress-fill ${cls}" style="width:${pct}%"></div></div>` +
       `<div class="dl-info"><span class="dl-pct">${pct.toFixed(1)}%</span></div>`;
-    return `<div class="download-item" data-amazon-active="${esc(id)}">
+    return `<div class="download-item" data-store-active="${esc(a.store)}">
       <div class="dl-head">
-        <div class="dl-title">${esc(a.title)}</div>
+        <div class="dl-title">${esc(a.title)} <span class="dl-store">${esc(store)}</span></div>
         <div class="dl-status ${cls}">${esc(label)}</div>
       </div>
       ${bar}
@@ -796,7 +851,7 @@ function renderAmazonActive() {
 function renderAmazonUi() {
   renderAmazonStatus();
   renderAmazonGames();
-  renderAmazonActive();
+  renderStoreDownloads();
 }
 
 /** Pokazuje komunikat błędu pod polem adresu logowania. */
@@ -930,14 +985,14 @@ async function amazonInstall(id) {
     if (!g.installDir) return; // anulowano wybór folderu
   }
   amazonActive.set(id, { title: g.title, percent: null, line: t("amazon.starting"), ok: null, error: "" });
-  renderAmazonActive();
+  renderStoreDownloads();
   try {
     await invoke("amazon_install", { gameId: id });
     // Postęp jest w zakładce Pobierania — od razu ją pokazujemy (jak przy GOG).
     switchView("downloads");
   } catch (e) {
     amazonActive.set(id, { title: g.title, percent: null, line: "", ok: false, error: String(e) });
-    renderAmazonActive();
+    renderStoreDownloads();
   }
 }
 
@@ -947,10 +1002,10 @@ async function amazonLaunch(id) {
   try {
     await invoke("amazon_launch", { gameId: id });
     amazonActive.delete(id);
-    renderAmazonActive();
+    renderStoreDownloads();
   } catch (e) {
     amazonActive.set(id, { title: g ? g.title : id, percent: null, line: "", ok: false, error: String(e) });
-    renderAmazonActive();
+    renderStoreDownloads();
   }
 }
 
@@ -964,6 +1019,275 @@ async function onAmazonGridClick(e) {
   if (dir) { await amazonPickDir(dir.getAttribute("data-amazon-dir")); return; }
   const open = e.target.closest("[data-amazon-open]");
   if (open) openFolder(open.getAttribute("data-amazon-open"));
+}
+
+/* ---------------------------- EPIC GAMES ---------------------------- */
+
+let epicStatus = null;
+/** Biblioteka Epic (`legendary list --json`). */
+let epicGames = [];
+/** Trwające/zakończone instalacje Epic: app_name -> { title, percent, line, ok, error }. */
+const epicActive = new Map();
+/** Czy czekamy na kod logowania wklejony ze strony legendary.gl/epiclogin. */
+let epicLoginPending = false;
+
+/** Wczytuje status integracji i bibliotekę Epic; `sync` wymusza pobranie metadanych. */
+async function loadEpic(sync) {
+  try { epicStatus = await invoke("epic_status"); }
+  catch (e) { epicStatus = { available: false, loggedIn: false, username: null }; }
+  renderEpicStatus();
+  if (!epicStatus.available || !epicStatus.loggedIn) {
+    epicGames = [];
+    renderEpicGames();
+    return;
+  }
+  if (sync) {
+    const btn = d.epicRefreshBtn;
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = t("amazon.syncing");
+    try { await invoke("epic_sync"); } catch (e) { console.error("epic sync:", e); }
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+  try { epicGames = await invoke("epic_library"); }
+  catch (e) { epicGames = []; console.error("epic library:", e); }
+  renderEpicGames();
+}
+
+/** Rysuje pasek statusu (brak legendary / logowanie / konto) i stan pusty. */
+function renderEpicStatus() {
+  const st = epicStatus;
+  if (!st || !st.available) {
+    show(d.epicSetup); hide(d.epicBar); hide(d.epicGrid); hide(d.epicEmpty);
+    hide(d.epicLoginPanel);
+    if (st) d.epicSetupMsg.textContent = t("epic.missing");
+    return;
+  }
+  hide(d.epicSetup); show(d.epicBar);
+  d.epicLoginPanel.classList.toggle("hidden", !epicLoginPending);
+  d.epicUser.textContent = st.loggedIn ? (st.username || t("epic.account")) : t("epic.notLoggedIn");
+  d.epicUser.classList.toggle("badge-online", !!st.loggedIn);
+  d.epicLoginBtn.classList.toggle("hidden", !!st.loggedIn);
+  d.epicLogoutBtn.classList.toggle("hidden", !st.loggedIn);
+  d.epicRefreshBtn.classList.toggle("hidden", !st.loggedIn);
+  if (!st.loggedIn) {
+    hide(d.epicGrid);
+    d.epicEmpty.innerHTML = `<p>${t("epic.loginHint")}</p>`;
+    d.epicEmpty.classList.remove("hidden");
+  }
+}
+
+/** Kafelek gry Epic: okładka z metadanych, tytuł, stan i akcje. */
+function epicCardHtml(g) {
+  const initial = (g.title || "?").trim().charAt(0).toUpperCase();
+  const installed = g.installed && g.dirExists;
+  const badge = installed ? `<span class="game-state downloaded">${esc(t("epic.installed"))}</span>` : "";
+  const primary = installed
+    ? `<button class="btn btn-small btn-primary" data-epic-launch="${esc(g.id)}">${esc(t("epic.play"))}</button>`
+    : `<button class="btn btn-small btn-primary" data-epic-install="${esc(g.id)}">${esc(t("epic.install"))}</button>`;
+  const open = g.installDir
+    ? `<button class="btn btn-small" data-epic-open="${esc(g.installDir)}">${esc(t("folder.open"))}</button>`
+    : "";
+  // Okładka z biblioteki Epic; gdy obrazek nie wczyta się, zostaje sama litera.
+  const cover = g.coverUrl
+    ? `<img src="${esc(g.coverUrl)}" alt="" loading="lazy" onerror="this.remove()">`
+    : "";
+  return `<div class="game-card amazon-card">
+    <div class="amazon-cover" aria-hidden="true"><span>${esc(initial)}</span>${cover}</div>
+    ${g.developer ? `<div class="game-card-genre">${esc(g.developer)}</div>` : ""}
+    <div class="game-card-foot"><div class="game-card-title">${esc(g.title)}</div>${badge}</div>
+    <div class="amazon-card-actions">${primary}${open}
+      <button class="btn btn-small" data-epic-dir="${esc(g.id)}">${esc(t("epic.folder"))}</button>
+    </div>
+  </div>`;
+}
+
+/** Rysuje siatkę gier Epic (albo komunikat o pustej bibliotece). */
+function renderEpicGames() {
+  if (!epicStatus || !epicStatus.available || !epicStatus.loggedIn) return;
+  if (!epicGames.length) {
+    d.epicGrid.innerHTML = ""; hide(d.epicGrid);
+    d.epicEmpty.innerHTML = `<p>${t("epic.empty")}</p>`;
+    show(d.epicEmpty);
+    return;
+  }
+  hide(d.epicEmpty);
+  show(d.epicGrid);
+  d.epicGrid.innerHTML = epicGames.map(epicCardHtml).join("");
+}
+
+/** Wszystkie widoki Epic — używane m.in. przy zmianie języka. */
+function renderEpicUi() {
+  renderEpicStatus();
+  renderEpicGames();
+  renderStoreDownloads();
+}
+
+/** Pokazuje komunikat błędu pod polem kodu logowania. */
+function epicLoginError(msg) {
+  d.epicLoginError.textContent = msg;
+  show(d.epicLoginError);
+}
+
+/**
+ * Start logowania Epic.
+ * `legendary auth` bez argumentów czyta kod z terminala (`input()`), co bez konsoli kończy
+ * się `EOFError`. Dlatego otwieramy stałą stronę logowania, a kod wkleja użytkownik.
+ */
+async function epicLogin() {
+  d.epicLoginBtn.disabled = true;
+  d.epicLoginBtn.textContent = t("epic.loginOpening");
+  hide(d.epicLoginError);
+  try {
+    await invoke("epic_login");
+    epicLoginPending = true;
+    d.epicLoginCode.value = "";
+    show(d.epicLoginPanel);
+    d.epicLoginCode.focus();
+  } catch (e) {
+    d.epicEmpty.innerHTML = `<p class="error">${t("error.prefix")}: ${esc(String(e))}</p>`;
+    show(d.epicEmpty);
+  } finally {
+    d.epicLoginBtn.disabled = false;
+    d.epicLoginBtn.textContent = t("epic.login");
+  }
+  renderEpicStatus();
+}
+
+/** Kończy logowanie kodem (albo całym JSON-em) ze strony logowania. */
+async function epicLoginFinish() {
+  const code = d.epicLoginCode.value.trim();
+  hide(d.epicLoginError);
+  if (!code) { epicLoginError(t("epic.loginNoCode")); return; }
+  const btn = d.epicLoginFinishBtn;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = t("amazon.loginFinishing");
+  let ok = false;
+  try {
+    epicStatus = await invoke("epic_login_complete", { code });
+    ok = true;
+    epicLoginPending = false;
+    d.epicLoginCode.value = "";
+    hide(d.epicLoginPanel);
+    renderEpicStatus();
+  } catch (e) {
+    epicLoginError(`${t("error.prefix")}: ${String(e)}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+  if (ok) await loadEpic(true);
+}
+
+/** Anuluje oczekiwanie na kod logowania. */
+function epicLoginCancel() {
+  epicLoginPending = false;
+  d.epicLoginCode.value = "";
+  hide(d.epicLoginError);
+  hide(d.epicLoginPanel);
+  renderEpicStatus();
+}
+
+/** Wylogowanie konta Epic. */
+async function epicLogout() {
+  try { await invoke("epic_logout"); } catch (e) { console.error("epic logout:", e); }
+  epicGames = [];
+  d.epicGrid.innerHTML = "";
+  await loadEpic();
+}
+
+/** Kopiuje komendę instalacji legendary do schowka. */
+async function epicCopyCommand() {
+  const cmd = "winget install --id derrod.legendary";
+  try {
+    await navigator.clipboard.writeText(cmd);
+    const label = d.epicCopyBtn.textContent;
+    d.epicCopyBtn.textContent = t("amazon.copied");
+    setTimeout(() => { d.epicCopyBtn.textContent = label; }, 1500);
+  } catch (e) { console.error("clipboard:", e); }
+}
+
+/** Instaluje legendary przez winget (bez terminala) i odświeża status integracji. */
+async function epicInstallTool() {
+  const btn = d.epicInstallToolBtn;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = t("epic.installingTool");
+  hide(d.epicSetupError);
+  d.epicSetupError.textContent = "";
+  d.epicSetupProgress.textContent = t("epic.toolProgress");
+  show(d.epicSetupProgress);
+  try {
+    await invoke("epic_install_legendary");
+  } catch (e) {
+    d.epicSetupError.textContent = `${t("error.prefix")}: ${String(e)}`;
+    show(d.epicSetupError);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+    hide(d.epicSetupProgress);
+  }
+  await loadEpic();
+}
+
+/** Wybór folderu bazowego instalacji dla gry Epic. */
+async function epicPickDir(id) {
+  let dir = null;
+  try { dir = await invoke("pick_epic_dir", { gameId: id }); }
+  catch (e) { console.error("pick epic dir:", e); return; }
+  if (!dir) return;
+  const g = epicGames.find((x) => x.id === id);
+  if (g) g.chosenDir = dir;
+  renderEpicGames();
+}
+
+/** Pobiera i instaluje grę Epic (przez legendary); postęp przychodzi zdarzeniami. */
+async function epicInstall(id) {
+  const running = epicActive.get(id);
+  if (running && running.ok == null) return; // już się instaluje
+  const g = epicGames.find((x) => x.id === id);
+  if (!g) return;
+  if (!g.chosenDir) {
+    await epicPickDir(id);
+    if (!g.chosenDir) return; // anulowano wybór folderu
+  }
+  epicActive.set(id, { title: g.title, percent: null, line: t("amazon.starting"), ok: null, error: "" });
+  renderStoreDownloads();
+  try {
+    await invoke("epic_install", { gameId: id });
+    // Postęp jest w zakładce Pobierania — od razu ją pokazujemy (jak przy GOG).
+    switchView("downloads");
+  } catch (e) {
+    epicActive.set(id, { title: g.title, percent: null, line: "", ok: false, error: String(e) });
+    renderStoreDownloads();
+  }
+}
+
+/** Uruchamia zainstalowaną grę Epic. */
+async function epicLaunch(id) {
+  const g = epicGames.find((x) => x.id === id);
+  try {
+    await invoke("epic_launch", { gameId: id });
+    epicActive.delete(id);
+    renderStoreDownloads();
+  } catch (e) {
+    epicActive.set(id, { title: g ? g.title : id, percent: null, line: "", ok: false, error: String(e) });
+    renderStoreDownloads();
+  }
+}
+
+/** Obsługa kliknięć na kafelkach Epic (delegacja — kafelki są przerysowywane). */
+async function onEpicGridClick(e) {
+  const launch = e.target.closest("[data-epic-launch]");
+  if (launch) { await epicLaunch(launch.getAttribute("data-epic-launch")); return; }
+  const install = e.target.closest("[data-epic-install]");
+  if (install) { await epicInstall(install.getAttribute("data-epic-install")); return; }
+  const dir = e.target.closest("[data-epic-dir]");
+  if (dir) { await epicPickDir(dir.getAttribute("data-epic-dir")); return; }
+  const open = e.target.closest("[data-epic-open]");
+  if (open) openFolder(open.getAttribute("data-epic-open"));
 }
 
 /* ---------------------------- folder zapisu ---------------------------- */
@@ -1036,14 +1360,15 @@ async function loadDownloads() {
 function renderDownloads() {
   d.dlList.innerHTML = "";
   const rows = [...dlRows.values()].sort((a, b) => b.id - a.id);
-  // Pobrania Amazon liczą się do tej samej listy i plakietki w menu.
-  const amazonRunning = [...amazonActive.values()].filter((a) => a.ok == null).length;
-  if (!rows.length && !amazonActive.size) {
+  // Pobrania sklepów liczą się do tej samej listy i plakietki w menu.
+  const storeRunning = [...amazonActive.values()].filter((a) => a.ok == null).length +
+    [...epicActive.values()].filter((a) => a.ok == null).length;
+  if (!rows.length && !amazonActive.size && !epicActive.size) {
     d.dlList.innerHTML = `<p class="empty-state">${t("downloads.empty")}</p>`;
     hide(d.dlBadge);
     return;
   }
-  const active = rows.filter((x) => x.status === "downloading").length + amazonRunning;
+  const active = rows.filter((x) => x.status === "downloading").length + storeRunning;
   d.dlBadge.textContent = active > 0 ? String(active) : "\u2713";
   show(d.dlBadge);
   for (const x of rows) {

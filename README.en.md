@@ -26,6 +26,9 @@ download queue are empty.*
 - **Prime Gaming (Amazon Games)** — Amazon sign-in, the library from the Amazon Games client,
   downloading into a chosen folder and launching, handled by
   [`nile`](https://github.com/imLinguin/nile).
+- **Epic Games** — Epic sign-in, the library from the Epic Games Store (with cover art),
+  downloads into a folder of your choice and launching; powered by
+  [`legendary`](https://github.com/legendary-gl/legendary).
 
 ## Screenshots
 
@@ -44,6 +47,9 @@ download queue are empty.*
 - **Amazon Games (optional):** [`nile`](https://github.com/imLinguin/nile) —
   the app installs it with one button in the Prime Gaming tab (via `winget`, no terminal).
   Manual: `winget install --id imLinguin.nile`.
+- **Epic Games (optional):** [`legendary`](https://github.com/legendary-gl/legendary) —
+  the app installs it with one button in the Epic Games tab (via `winget`, no terminal).
+  Manual: `winget install --id derrod.legendary`.
 - **Linux:** `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`,
   `build-essential`
 - **macOS:** Xcode Command Line Tools
@@ -151,11 +157,18 @@ goglite/
 | `amazon_install_nile` | Installs `nile` via winget (button in the Prime Gaming tab) |
 | `pick_amazon_dir` | Choose the install folder for an Amazon game |
 | `amazon_install`, `amazon_launch` | Download/install and launch an Amazon game |
+| `epic_status` | Whether `legendary` is available and the Epic account is signed in |
+| `epic_login`, `epic_login_complete`, `epic_logout` | Epic sign-in (start + finish with the code from the sign-in page) and sign-out |
+| `epic_library`, `epic_sync` | Epic library (cached / forced metadata refresh) |
+| `epic_install_legendary` | Installs `legendary` via winget (button in the Epic Games tab) |
+| `pick_epic_dir` | Choose the install folder for an Epic game |
+| `epic_install`, `epic_launch` | Download/install and launch an Epic game |
 | `get_settings`, `set_language`, `set_theme` | Application settings |
 | `detect_os` | OS and architecture |
 
 Events emitted to the frontend: `auth:changed`, `auth:error`, `library:page`,
-`download:progress`, `download:state`, `amazon:progress`, `amazon:done`.
+`download:progress`, `download:state`, `amazon:progress`, `amazon:done`,
+`epic:progress`, `epic:done`, `epic:tool-progress`.
 
 ## Limitations
 
@@ -166,6 +179,9 @@ Events emitted to the frontend: `auth:changed`, `auth:error`, `library:page`,
 - Amazon Games works only through `nile` (Amazon has no public API). An Amazon account with
   games in the Amazon Games client is required; titles available only as keys for other stores
   are not handled here. Some games need Amazon services to launch.
+- Epic works only through `legendary` (Epic has no public API for the library). The first
+  library fetch can take a few minutes, and games that require EA App or Ubisoft Connect are
+  skipped. Store downloads (Prime Gaming and Epic) share the Downloads tab.
 
 ## License
 

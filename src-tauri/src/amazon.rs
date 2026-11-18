@@ -12,13 +12,13 @@
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
+use crate::cli;
 use crate::commands::AppState;
 use crate::db::Database;
 
@@ -30,8 +30,6 @@ const NILE_MISSING: &str =
 const NILE_READ_TIMEOUT: Duration = Duration::from_secs(120);
 /// Synchronizacja biblioteki w sieci bywa dłuższa — osobny limit.
 const NILE_SYNC_TIMEOUT: Duration = Duration::from_secs(300);
-/// Instalacja przez winget (pobranie pakietu i rozpakowanie).
-const WINGET_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Stan integracji widoczny w UI.
 #[derive(Debug, Clone, Serialize)]
@@ -80,14 +78,7 @@ fn pending_login() -> &'static Mutex<Option<NileLoginData>> {
 
 /// Buduje polecenie `nile` bez migającego okna konsoli (Windows).
 fn nile_command(bin: &Path) -> Command {
-    let mut cmd = Command::new(bin);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    cmd
+    cli::tool_command(bin)
 }
 
 /// Szuka `nile` w zmiennej `GOGLITE_NILE`, typowych miejscach instalacji i w PATH.
@@ -117,160 +108,8 @@ fn find_nile() -> Option<PathBuf> {
             candidates.push(dir.join(exe));
         }
     }
-    candidates.extend(winget_package_exes());
+    candidates.extend(cli::winget_package_exes("imlinguin.nile", "nile"));
     candidates.into_iter().find(|p| p.is_file())
-}
-
-/// Szuka `nile.exe` w katalogach pakietów winget (instalacja „portable”).
-/// Winget czasem nie zdąży utworzyć skrótu w `WinGet\Links`, więc zaglądamy też tutaj.
-fn winget_package_exes() -> Vec<PathBuf> {
-    let Ok(local) = std::env::var("LOCALAPPDATA") else {
-        return Vec::new();
-    };
-    let root = PathBuf::from(local)
-        .join("Microsoft")
-        .join("WinGet")
-        .join("Packages");
-    let Ok(dirs) = std::fs::read_dir(&root) else {
-        return Vec::new();
-    };
-    let mut found = Vec::new();
-    for dir in dirs.flatten() {
-        if !dir
-            .file_name()
-            .to_string_lossy()
-            .to_lowercase()
-            .starts_with("imlinguin.nile")
-        {
-            continue;
-        }
-        let Ok(files) = std::fs::read_dir(dir.path()) else {
-            continue;
-        };
-        for file in files.flatten() {
-            let name = file.file_name().to_string_lossy().to_lowercase();
-            if name.starts_with("nile") && name.ends_with(".exe") {
-                found.push(file.path());
-            }
-        }
-    }
-    found
-}
-
-// —————————— WYWOŁYWANIE ZEWNĘTRZNYCH NARZĘDZI ——————————
-
-/// Wynik uruchomienia zewnętrznego procesu z limitem czasu.
-struct RunOutcome {
-    status: Option<std::process::ExitStatus>,
-    stdout: String,
-    stderr: String,
-    timed_out: bool,
-}
-
-fn push_line(
-    is_err: bool,
-    line: String,
-    stdout: &mut String,
-    stderr: &mut String,
-    on_line: &mut dyn FnMut(&str),
-) {
-    on_line(&line);
-    let target = if is_err { stderr } else { stdout };
-    target.push_str(&line);
-    target.push('\n');
-}
-
-/// Uruchamia proces, zbierając `stdout`/`stderr`; każda linia trafia też do `on_line`.
-/// Po `limit` proces jest ubijany — zawieszone winget/nile nie blokuje aplikacji w nieskończoność.
-fn run_with_timeout(
-    mut cmd: Command,
-    limit: Duration,
-    mut on_line: impl FnMut(&str),
-) -> Result<RunOutcome, String> {
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("Nie udało się uruchomić narzędzia: {e}"))?;
-
-    // Osobne wątki czytające — inaczej pełny bufor rury zablokowałby proces.
-    let (tx, rx) = mpsc::channel::<(bool, String)>();
-    let mut pipes: Vec<(bool, Box<dyn std::io::Read + Send>)> = Vec::new();
-    if let Some(pipe) = child.stdout.take() {
-        pipes.push((false, Box::new(pipe)));
-    }
-    if let Some(pipe) = child.stderr.take() {
-        pipes.push((true, Box::new(pipe)));
-    }
-    for (is_err, pipe) in pipes {
-        let tx = tx.clone();
-        std::thread::spawn(move || {
-            for line in BufReader::new(pipe).lines() {
-                let Ok(line) = line else { break };
-                if tx.send((is_err, line)).is_err() {
-                    break;
-                }
-            }
-        });
-    }
-    drop(tx);
-
-    let mut stdout = String::new();
-    let mut stderr = String::new();
-    let mut status = None;
-    let mut timed_out = false;
-    let deadline = Instant::now() + limit;
-    loop {
-        while let Ok((is_err, line)) = rx.recv_timeout(Duration::from_millis(40)) {
-            push_line(is_err, line, &mut stdout, &mut stderr, &mut on_line);
-        }
-        match child.try_wait() {
-            Ok(Some(st)) => {
-                status = Some(st);
-                break;
-            }
-            Ok(None) => {}
-            Err(e) => return Err(format!("Błąd procesu: {e}")),
-        }
-        if Instant::now() >= deadline {
-            timed_out = true;
-            let _ = child.kill();
-            let _ = child.wait();
-            break;
-        }
-    }
-
-    // Wyjście, które doszło już po zakończeniu procesu.
-    let flush_until = Instant::now() + Duration::from_millis(500);
-    while Instant::now() < flush_until {
-        match rx.recv_timeout(Duration::from_millis(50)) {
-            Ok((is_err, line)) => push_line(is_err, line, &mut stdout, &mut stderr, &mut on_line),
-            Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-        }
-    }
-
-    Ok(RunOutcome {
-        status,
-        stdout,
-        stderr,
-        timed_out,
-    })
-}
-
-/// Ścieżka do `winget` — alias z `WindowsApps` bywa nieosiągalny z PATH aplikacji GUI.
-fn winget_program() -> PathBuf {
-    if let Ok(local) = std::env::var("LOCALAPPDATA") {
-        let alias = PathBuf::from(local)
-            .join("Microsoft")
-            .join("WindowsApps")
-            .join("winget.exe");
-        if alias.is_file() {
-            return alias;
-        }
-    }
-    PathBuf::from("winget")
 }
 
 // —————————— INSTALACJA NILE (winget) ——————————
@@ -281,28 +120,7 @@ fn install_nile_via_winget(app: &AppHandle) -> Result<(), String> {
     if find_nile().is_some() {
         return Ok(());
     }
-    let mut cmd = Command::new(winget_program());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    cmd.args([
-        "install",
-        "--exact",
-        "--id",
-        "imLinguin.nile",
-        "--accept-package-agreements",
-        "--accept-source-agreements",
-    ]);
-    let out = run_with_timeout(cmd, WINGET_TIMEOUT, |line| {
-        let line = line.trim();
-        if !line.is_empty() {
-            let _ = app.emit("amazon:nile-progress", serde_json::json!({ "line": line }));
-        }
-    })?;
-
+    let out = cli::winget_install(app, "amazon:nile-progress", "imLinguin.nile")?;
     // Winget potrafi zwrócić błąd „już zainstalowano” — rozstrzyga obecność pliku.
     if find_nile().is_some() {
         return Ok(());
@@ -313,7 +131,7 @@ fn install_nile_via_winget(app: &AppHandle) -> Result<(), String> {
                 .to_string(),
         );
     }
-    if matches!(out.status, Some(status) if status.success()) {
+    if out.success() {
         return Err(
             "nile został zainstalowany, ale nie znaleziono pliku nile.exe — uruchom goglite ponownie."
                 .to_string(),
@@ -354,7 +172,7 @@ fn run_nile(args: &[&str], limit: Duration) -> Result<String, String> {
     let bin = find_nile().ok_or_else(|| NILE_MISSING.to_string())?;
     let mut cmd = nile_command(&bin);
     cmd.args(args);
-    let out = run_with_timeout(cmd, limit, |_| {})?;
+    let out = cli::run_with_timeout(cmd, limit, |_| {})?;
     if out.timed_out {
         return Err(format!(
             "nile {} nie odpowiedział w wyznaczonym czasie",
@@ -441,7 +259,7 @@ pub async fn amazon_login(app: AppHandle) -> Result<(), String> {
         let mut cmd = nile_command(&bin);
         cmd.args(["auth", "--login", "--non-interactive"])
             .stdin(Stdio::null());
-        let out = run_with_timeout(cmd, NILE_READ_TIMEOUT, |_| {})?;
+        let out = cli::run_with_timeout(cmd, NILE_READ_TIMEOUT, |_| {})?;
         if out.timed_out {
             return Err("nile nie odpowiedział w wyznaczonym czasie".to_string());
         }
@@ -694,59 +512,6 @@ pub async fn pick_amazon_dir(
 
 // —————————— POBIERANIE / URUCHAMIANIE ——————————
 
-/// Wyciąga procent z linii logu `nile`.
-/// nile wypisuje postęp jako `INFO [PROGRESS]: = Progress: 4.62 21542473/424961033, …`
-/// (bez znaku `%`), więc obsługujemy też klasyczny format `… 42.5% …`.
-fn parse_percent(line: &str) -> Option<f32> {
-    if let Some(rest) = line.split("= Progress:").nth(1) {
-        if let Some(value) = rest.split_whitespace().next().and_then(|v| v.parse::<f32>().ok()) {
-            return Some(value);
-        }
-    }
-    let idx = line.find('%')?;
-    let head = &line[..idx];
-    let number: String = head
-        .chars()
-        .rev()
-        .take_while(|c| c.is_ascii_digit() || *c == '.')
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect();
-    number.parse::<f32>().ok()
-}
-
-/// Zamienia linię logu `nile` na krótki tekst dla UI.
-/// `None` oznacza linie techniczne (prędkości odczytu/zapisu), które tylko zaśmiecają listę.
-fn progress_text(line: &str, percent: Option<f32>) -> Option<String> {
-    let clean = line
-        .split_once("]:\t")
-        .map(|(_, rest)| rest)
-        .unwrap_or(line)
-        .trim();
-    if clean.is_empty() || clean.starts_with('+') {
-        return None;
-    }
-    if percent.is_some() {
-        let rest = clean.split("= Progress:").nth(1).unwrap_or("").trim();
-        let mut parts = rest.split_whitespace();
-        let pct = parts.next().unwrap_or("0").to_string();
-        let done_bytes = parts
-            .next()
-            .and_then(|sizes| sizes.split('/').next())
-            .and_then(|v| v.parse::<f64>().ok())
-            .unwrap_or(0.0);
-        let eta = clean.split("ETA:").nth(1).map(str::trim).unwrap_or("");
-        let mib = done_bytes / 1024.0 / 1024.0;
-        return Some(if eta.is_empty() {
-            format!("{pct}% · {mib:.1} MiB")
-        } else {
-            format!("{pct}% · {mib:.1} MiB · ETA {eta}")
-        });
-    }
-    Some(clean.to_string())
-}
-
 fn emit_done(app: &AppHandle, game_id: &str, ok: bool, error: &str) {
     let _ = app.emit(
         "amazon:done",
@@ -792,8 +557,8 @@ pub fn amazon_install(
         if let Some(stderr) = child.stderr.take() {
             for line in BufReader::new(stderr).lines() {
                 let Ok(line) = line else { break };
-                let percent = parse_percent(&line);
-                let Some(text) = progress_text(&line, percent) else { continue };
+                let percent = cli::parse_percent(&line);
+                let Some(text) = cli::progress_text(&line, percent) else { continue };
                 last_line = text.clone();
                 let _ = app.emit(
                     "amazon:progress",
@@ -861,25 +626,6 @@ mod tests {
             games[0].cover_url.as_deref(),
             Some("https://m.media-amazon.com/images/I/test.jpg"),
             "okładka ma pochodzić z backgroundUrl1"
-        );
-    }
-
-    #[test]
-    fn wyciaga_procent_z_linii_logu() {
-        assert_eq!(parse_percent("Downloading file 42.5% done"), Some(42.5));
-        assert_eq!(parse_percent("100%"), Some(100.0));
-        assert_eq!(parse_percent("bez procentow"), None);
-        // Rzeczywisty format nile (bez znaku `%`).
-        let line = "INFO [PROGRESS]:\t = Progress: 4.62 21542473/424961033, Running for: 00:00:15, ETA: 00:05:12";
-        assert_eq!(parse_percent(line), Some(4.62));
-        assert_eq!(
-            progress_text(line, parse_percent(line)).as_deref(),
-            Some("4.62% · 20.5 MiB · ETA 00:05:12")
-        );
-        // Prędkości zapisu/odczytu są pomijane.
-        assert_eq!(
-            progress_text("INFO [PROGRESS]:\t  + Disk\t- 0.75 MiB/s", None),
-            None
         );
     }
 

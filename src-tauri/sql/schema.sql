@@ -49,3 +49,11 @@ CREATE TABLE IF NOT EXISTS amazon_games (
     installed    INTEGER NOT NULL DEFAULT 0,  -- 1 po udanym `nile install`
     last_seen_at INTEGER NOT NULL DEFAULT 0
 );
+-- Lokalny stan gier z Epic: wybrany folder bazowy i znacznik instalacji.
+-- Tytuły, okładki i sama biblioteka pochodzą z `legendary`, więc nie są tu duplikowane.
+CREATE TABLE IF NOT EXISTS epic_games (
+    id           TEXT PRIMARY KEY,            -- Epic app name (np. "Settlers")
+    install_dir  TEXT,                        -- folder bazowy wybrany dla tej gry
+    installed    INTEGER NOT NULL DEFAULT 0,  -- 1 po udanym `legendary install`
+    last_seen_at INTEGER NOT NULL DEFAULT 0
+);

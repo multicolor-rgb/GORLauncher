@@ -387,6 +387,64 @@ impl Database {
         }
         Ok(map)
     }
+
+    // —————————————— EPIC ——————————————
+
+    /// Zapisuje folder bazowy instalacji gry Epic (`None` czyści wybór).
+    pub fn set_epic_install_dir(&self, game_id: &str, dir: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO epic_games (id, install_dir, last_seen_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET install_dir = excluded.install_dir,
+                                           last_seen_at = excluded.last_seen_at",
+            params![game_id, dir, now_ms()],
+        )?;
+        Ok(())
+    }
+
+    /// Oznacza grę Epic jako zainstalowaną (albo zdejmuje znacznik).
+    pub fn set_epic_installed(&self, game_id: &str, installed: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO epic_games (id, installed, last_seen_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET installed = excluded.installed,
+                                           last_seen_at = excluded.last_seen_at",
+            params![game_id, installed as i64, now_ms()],
+        )?;
+        Ok(())
+    }
+
+    /// Folder bazowy wybrany dla gry Epic (brak wiersza = brak wyboru).
+    pub fn get_epic_install_dir(&self, game_id: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT install_dir FROM epic_games WHERE id = ?1")?;
+        let mut rows = stmt.query(params![game_id])?;
+        match rows.next()? {
+            Some(row) => Ok(row.get::<_, Option<String>>(0)?),
+            None => Ok(None),
+        }
+    }
+
+    /// Wszystkie zapisane stany gier Epic: `id -> (folder, zainstalowana)`.
+    pub fn epic_states(
+        &self,
+    ) -> Result<std::collections::HashMap<String, (Option<String>, bool)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT id, install_dir, installed FROM epic_games")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, i64>(2)? != 0,
+            ))
+        })?;
+        let mut map = std::collections::HashMap::new();
+        for row in rows {
+            let (id, dir, installed) = row?;
+            map.insert(id, (dir, installed));
+        }
+        Ok(map)
+    }
 }
 
 // ====================== TESTY ======================
