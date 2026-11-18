@@ -1,4 +1,4 @@
-# goglite
+# GOR Launcher
 
 [Polski](README.md) · **English**
 

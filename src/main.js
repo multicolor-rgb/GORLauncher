@@ -23,7 +23,7 @@ const d = {
   // biblioteka
   gameSection: $("#game-section"), gameGrid: $("#game-grid"),
   gameEmpty: $("#game-empty"), gameCount: $("#game-count"),
-  platformFilter: $("#platform-filter"),
+
   syncBar: $("#sync-progress"), syncProg: $("#sync-progress-bar"),
   // pobierania
   dlList: $("#download-list"), dlBadge: $("#dl-badge"),
@@ -57,7 +57,8 @@ const d = {
   navGog: $("#nav-gog"), viewGog: $("#view-gog"),
   gogGrid: $("#gog-grid"), gogEmpty: $("#gog-empty"),
   gogUser: $("#gog-user"), gogLoginBtn: $("#btn-gog-login"), gogLogoutBtn: $("#btn-gog-logout"),
-  gogPlatformFilter: $("#gog-platform-filter"), storeFilter: $("#store-filter"),
+  storeFilter: $("#store-filter"),
+  librarySort: $("#library-sort"), hideDupesBtn: $("#btn-hide-dupes"), dupesNote: $("#dupes-note"),
   // Epic Games
   navEpic: $("#nav-epic"), viewEpic: $("#view-epic"),
   epicSetup: $("#epic-setup"), epicSetupMsg: $("#epic-setup-msg"),
@@ -88,10 +89,6 @@ let currentTheme = "dark";
 let activeModalTab = "info";
 /** System operacyjny z backendu: "linux" | "windows" | "macos". */
 let currentOs = "linux";
-/** Filtr platformy w bibliotece: "all" | "windows" | "linux" | "macos". */
-let platformFilter = "all";
-/** Filtr platformy na liście instalatorów w modalu: "all" | "windows" | "linux" | "macos". */
-let installerFilter = "all";
 /** Instalatory aktualnie otwartej gry (do filtrowania bez ponownego zapytania). */
 let modalInstallers = [];
 /** Id gry aktualnie otwartej w modalu. */
@@ -102,6 +99,10 @@ let modalMeta = null;
 let modalInstallersError = null;
 /** Filtr sklepu w Bibliotece: "all" | "gog" | "prime" | "epic". */
 let storeFilter = "all";
+/** Sortowanie Biblioteki: "added" (najnowsze dopisane) | "installed" (zainstalowane najpierw). */
+let librarySort = "added";
+/** Czy chować duplikaty — tę samą grę w kilku sklepach zostawiamy raz. */
+let hideDuplicates = false;
 /** Trwające instalacje gier GOG (id gry) i ostatnie błędy instalacji. */
 const gogBusy = new Set();
 const gogErrors = new Map();
@@ -165,10 +166,22 @@ async function init() {
       renderAllGames();
     });
   }
-  if (d.gogPlatformFilter) {
-    d.gogPlatformFilter.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-platform]");
-      if (btn) selectPlatformFilter(btn.getAttribute("data-platform"));
+  // Sortowanie Biblioteki (najnowsze / zainstalowane) i chowanie duplikatów między sklepami.
+  if (d.librarySort) {
+    d.librarySort.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-sort]");
+      if (!btn) return;
+      librarySort = btn.getAttribute("data-sort") === "installed" ? "installed" : "added";
+      d.librarySort.querySelectorAll("[data-sort]").forEach((b) => b.classList.toggle("active", b === btn));
+      renderAllGames();
+    });
+  }
+  if (d.hideDupesBtn) {
+    d.hideDupesBtn.addEventListener("click", () => {
+      hideDuplicates = !hideDuplicates;
+      d.hideDupesBtn.classList.toggle("active", hideDuplicates);
+      d.hideDupesBtn.setAttribute("aria-pressed", String(hideDuplicates));
+      renderAllGames();
     });
   }
   d.closeModalBtn.addEventListener("click", closeModal);
@@ -227,13 +240,6 @@ async function init() {
     const btn = e.target.closest("[data-theme-opt]");
     if (btn) applyTheme(btn.getAttribute("data-theme-opt"), true);
   });
-  // Filtr platformy w bibliotece (Wszystkie / Windows / Linux / macOS)
-  if (d.platformFilter) {
-    d.platformFilter.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-platform]");
-      if (btn) selectPlatformFilter(btn.getAttribute("data-platform"));
-    });
-  }
 
   // Język: zapisane ustawienie > język systemu (fallback pl).
   let savedLang = null, savedTheme = null;
@@ -242,9 +248,8 @@ async function init() {
   // Motyw: zapisane ustawienie > domyślny ciemny.
   applyTheme(savedTheme || "dark", false);
 
-  // Wykrycie systemu — domyślnie zaznaczamy platformę bieżącego systemu w filtrze.
+  // Wykrycie systemu (aplikacja jest windowsowa, ale rozpoznanie zostaje dla pobierań).
   try { const info = await detectOs(); if (info && info.os) currentOs = info.os; } catch (e) {}
-  selectPlatformFilter(currentOs);
 
   try { const st = await invoke("get_auth_status"); loggedIn = st.loggedIn; } catch (e) {}
   renderAuth();
@@ -288,6 +293,7 @@ async function init() {
     if (e.payload.downloadedBytes != null) a.downloadedBytes = e.payload.downloadedBytes;
     if (e.payload.totalBytes) a.totalBytes = e.payload.totalBytes;
     renderStoreDownloads();
+    patchStoreCardProgress("prime", e.payload.gameId, a);
   });
   listen("amazon:done", (e) => {
     const { gameId, ok, error } = e.payload;
@@ -313,6 +319,7 @@ async function init() {
     if (e.payload.downloadedBytes != null) a.downloadedBytes = e.payload.downloadedBytes;
     if (e.payload.totalBytes) a.totalBytes = e.payload.totalBytes;
     renderStoreDownloads();
+    patchStoreCardProgress("epic", e.payload.gameId, a);
   });
   listen("epic:done", (e) => {
     const { gameId, ok, error } = e.payload;
@@ -336,7 +343,8 @@ async function init() {
 function applyLanguage(lang, persist) {
   const norm = setLanguage(lang);
   renderAuth();
-  if (loggedIn) renderGames();
+  // Biblioteka tłumaczy też notkę o ukrytych duplikatach — rysujemy ją zawsze.
+  renderGames();
   renderDownloads();
   renderAmazonUi();
   renderEpicUi();
@@ -444,17 +452,14 @@ function gogCardHtml(g) {
     : `<div class="game-card-fallback">\uD83C\uDFAE</div>`;
   const genre = g.genre ? `<div class="game-card-genre">${esc(g.genre)}</div>` : "";
   return `<div class="game-card" data-store="gog" data-game-id="${esc(g.id)}">` +
-    `${img}${genre}${platformBadgesHtml(g.platforms)}` +
+    `${img}${genre}` +
     `<div class="game-card-foot"><div class="game-card-title">${esc(g.title)}</div>` +
     `${sizeTag(g.sizeBytes)}<span class="game-card-store">GOG</span>${gameStateTagHtml(g.id)}</div></div>`;
 }
 
-/** Czy gra pasuje do wyszukiwarki i filtra platformy (gry Amazon/Epic są windowsowe). */
+/** Czy gra pasuje do wyszukiwarki. Aplikacja jest windowsowa, więc platform nie filtrujemy. */
 function gameMatches(store, g) {
-  if (searchQuery && !(g.title || "").toLowerCase().includes(searchQuery)) return false;
-  if (platformFilter === "all") return true;
-  const platforms = store === "gog" ? (Array.isArray(g.platforms) ? g.platforms : []) : ["windows"];
-  return platforms.includes(platformFilter);
+  return !searchQuery || (g.title || "").toLowerCase().includes(searchQuery);
 }
 
 /** Rysuje obie siatki: Bibliotekę (wszystkie sklepy) oraz widok GOG. */
@@ -481,19 +486,83 @@ function renderGogGames() {
   d.gogGrid.innerHTML = list.map(gogCardHtml).join("");
 }
 
+/** Klucz porównywania tytułów: bez wielkości liter, interpunkcji i znaków diakrytycznych. */
+function titleKey(title) {
+  return String(title || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ł/g, "l")
+    .replace(/[™®©]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+/** Kolejność sklepów przy wyborze jednej karty z duplikatów (GOG ma instalatory lokalnie). */
+const STORE_RANK = { gog: 0, prime: 1, epic: 2 };
+
+/** Czy gra jest zainstalowana — każdy sklep trzyma to w innym polu. */
+function isGameInstalled(store, g) {
+  if (store === "gog") return !!g.launchExe;
+  return !!(g.installed && g.dirExists);
+}
+
 /** Biblioteka: gry ze wszystkich sklepów + filtr sklepu, platformy i wyszukiwarki. */
 function renderAllGames() {
-  const cards = [];
+  let cards = [];
   const push = (store, list, html) => {
     if (storeFilter !== "all" && storeFilter !== store) return;
     for (const g of list) {
-      if (gameMatches(store, g)) cards.push({ title: g.title || "", addedAt: g.addedAt || 0, html: html(g) });
+      if (!gameMatches(store, g)) continue;
+      cards.push({
+        store,
+        title: g.title || "",
+        addedAt: g.addedAt || 0,
+        installed: isGameInstalled(store, g),
+        html: html(g),
+      });
     }
   };
   push("gog", loggedIn ? gamesCache : [], gogCardHtml);
   push("prime", amazonStatus && amazonStatus.available && amazonStatus.loggedIn ? amazonGames : [], amazonCardHtml);
   push("epic", epicStatus && epicStatus.available && epicStatus.loggedIn ? epicGames : [], epicCardHtml);
-  cards.sort((a, b) => (b.addedAt - a.addedAt) || a.title.localeCompare(b.title));
+
+  // Duplikaty: ta sama gra w kilku sklepach. Zostawiamy jedną kartę — zainstalowaną,
+  // a przy remisie tę z wyżej postawionego sklepu (GOG → Prime → Epic).
+  let hidden = 0;
+  if (hideDuplicates) {
+    const groups = new Map();
+    for (const c of cards) {
+      const key = titleKey(c.title);
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(c);
+    }
+    const dropped = new Set();
+    for (const group of groups.values()) {
+      // Ta sama nazwa w jednym sklepie to nie duplikat między platformami.
+      if (new Set(group.map((c) => c.store)).size < 2) continue;
+      const best = [...group].sort((a, b) =>
+        Number(b.installed) - Number(a.installed)
+        || STORE_RANK[a.store] - STORE_RANK[b.store]
+        || b.addedAt - a.addedAt)[0];
+      for (const c of group) if (c !== best) { dropped.add(c); hidden += 1; }
+    }
+    if (dropped.size) cards = cards.filter((c) => !dropped.has(c));
+  }
+
+  // „Zainstalowane” to filtr, nie sortowanie — pokazujemy wyłącznie zainstalowane gry.
+  if (librarySort === "installed") cards = cards.filter((c) => c.installed);
+
+  cards.sort((a, b) => b.addedAt - a.addedAt || a.title.localeCompare(b.title));
+  if (d.dupesNote) {
+    if (hidden) {
+      d.dupesNote.textContent = t("library.duplicatesHidden").replace("{n}", String(hidden));
+      show(d.dupesNote);
+    } else {
+      d.dupesNote.textContent = "";
+      hide(d.dupesNote);
+    }
+  }
   d.gameGrid.innerHTML = "";
   show(d.gameSection);
   if (!cards.length) {
@@ -502,7 +571,7 @@ function renderAllGames() {
       || (amazonStatus && amazonStatus.loggedIn)
       || (epicStatus && epicStatus.loggedIn);
     d.gameEmpty.innerHTML = anyLibrary
-      ? `<p>${t("library.noResults")}</p>`
+      ? `<p>${t(librarySort === "installed" ? "library.noInstalled" : "library.noResults")}</p>`
       : `<p>${t("library.emptyPrefix")}<strong>${t("library.emptyAction")}</strong>${t("library.emptySuffix")}</p>`;
     show(d.gameEmpty);
     return;
@@ -510,11 +579,6 @@ function renderAllGames() {
   d.gameCount.textContent = String(cards.length);
   hide(d.gameEmpty);
   d.gameGrid.innerHTML = cards.map((c) => c.html).join("");
-}
-
-/** Czy którykolwiek wiersz biblioteki zawiera informację o platformach. */
-function platformDataAvailable() {
-  return gamesCache.some((g) => Array.isArray(g.platforms) && g.platforms.length);
 }
 
 /** Stan plików gry wyliczony z wierszy pobierań: `downloading` / `downloaded` / `missing`. */
@@ -537,28 +601,6 @@ function gameStateTagHtml(gameId) {
   return `<span class="game-state ${st}">${esc(t(key))}</span>`;
 }
 
-/** Znaczniki platform (Win/Lin/Mac) w rogu kafelka gry. */
-function platformBadgesHtml(platforms) {
-  if (!Array.isArray(platforms) || !platforms.length) return "";
-  const parts = [];
-  if (platforms.includes("windows")) parts.push(`<span class="plat-tag plat-windows">Win</span>`);
-  if (platforms.includes("linux")) parts.push(`<span class="plat-tag plat-linux">Lin</span>`);
-  if (platforms.includes("macos")) parts.push(`<span class="plat-tag plat-macos">Mac</span>`);
-  return parts.length ? `<div class="game-card-platforms">${parts.join("")}</div>` : "";
-}
-
-/** Ustawia aktywny filtr platformy w bibliotece i odświeża siatkę. */
-function selectPlatformFilter(platform) {
-  platformFilter = platform || "all";
-  // Filtr platformy jest wspólny dla Biblioteki i widoku GOG — podświetlamy oba paski.
-  [d.platformFilter, d.gogPlatformFilter].forEach((box) => {
-    if (!box) return;
-    box.querySelectorAll("[data-platform]").forEach((b) =>
-      b.classList.toggle("active", b.getAttribute("data-platform") === platformFilter));
-  });
-  renderGames();
-}
-
 async function openGame(game) {
   currentGameId = String(game.id);
   const image = game.imageUrl || game.iconUrl;
@@ -578,7 +620,6 @@ async function openGame(game) {
   const installers = instRes.status === "fulfilled" ? instRes.value : null;
   const instError = instRes.status === "rejected" ? instRes.reason : null;
   modalInstallers = Array.isArray(installers) ? installers : [];
-  installerFilter = "all";
   // Zapamiętujemy dane modala, żeby po instalacji GOG odświeżyć go bez ponownych zapytań.
   modalGame = game; modalMeta = meta; modalInstallersError = instError;
   renderModal(game, meta, installers, instError);
@@ -624,29 +665,14 @@ function renderModal(game, meta, installers, installersError) {
   } else if (!installers || !installers.length) {
     inst += `<p class="empty-state">${t("modal.noInstallers")}</p>`;
   } else {
-    inst += gameDirRowHtml(game.id) + `<div class="platform-filter" id="inst-filter">` +
-      platformChip("all", t("filter.all")) +
-      platformChip("windows", t("filter.windows")) +
-      platformChip("linux", t("filter.linux")) +
-      platformChip("macos", t("filter.macos")) +
-      `</div><div id="inst-list" class="installer-list"></div>`;
+    inst += gameDirRowHtml(game.id) + `<div id="inst-list" class="installer-list"></div>`;
   }
 
   d.modalBody.innerHTML =
     `<div class="modal-panel" data-panel="info">${info}</div>` +
     `<div class="modal-panel hidden" data-panel="installers">${inst}</div>`;
 
-  if (hasInstallers) {
-    renderInstallerList(game.id);
-    d.modalBody.querySelector("#inst-filter").addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-platform]");
-      if (!btn) return;
-      installerFilter = btn.getAttribute("data-platform") || "all";
-      d.modalBody.querySelector("#inst-filter").querySelectorAll("[data-platform]").forEach((b) =>
-        b.classList.toggle("active", b === btn));
-      renderInstallerList(game.id);
-    });
-  }
+  if (hasInstallers) renderInstallerList(game.id);
 
   bindGameDirButton(game.id);
   bindGogActions(game.id);
@@ -659,20 +685,13 @@ function renderModal(game, meta, installers, installersError) {
   switchModalTab(activeModalTab);
 }
 
-/** Przycisk filtra platformy (z podświetleniem aktywnego wyboru instalatorów). */
-function platformChip(value, label) {
-  const active = installerFilter === value ? " active" : "";
-  return `<button class="chip${active}" data-platform="${value}">${esc(label)}</button>`;
-}
-
-/** Rysuje listę instalatorów w modalu (filtr + sortowanie wg platformy). */
+/** Rysuje listę instalatorów w modalu (sortowanie wg platformy, bez filtra). */
 function renderInstallerList(gameId) {
   const list = d.modalBody.querySelector("#inst-list");
   if (!list) return;
-  const items = sortInstallers(modalInstallers)
-    .filter((i) => installerFilter === "all" || normOs(i.os) === installerFilter);
+  const items = sortInstallers(modalInstallers);
   if (!items.length) {
-    list.innerHTML = `<p class="empty-state">${t("modal.noInstallersForPlatform")}</p>`;
+    list.innerHTML = `<p class="empty-state">${t("modal.noInstallers")}</p>`;
     return;
   }
   list.innerHTML = items.map((i) => installerItemHtml(i, gameId)).join("");
@@ -1032,11 +1051,52 @@ function renderAmazonStatus() {
   }
 }
 
+/**
+ * Aktywna instalacja sklepu (Prime/Epic) dla kafelka — `null`, gdy nic się nie dzieje.
+ * Zakończone instalacje pokazuje zakładka Pobierania i odświeżona biblioteka.
+ */
+function storeActive(store, gameId) {
+  const map = store === "epic" ? epicActive : amazonActive;
+  const a = map.get(gameId);
+  return a && a.ok == null ? a : null;
+}
+
+/** Podpis postępu: „W trakcie pobierania” plus procent, gdy nile/legendary go poda. */
+function storeProgressLabel(pct) {
+  return pct == null ? t("game.state.downloading") : `${t("game.state.downloading")} ${Math.round(pct)}%`;
+}
+
+/**
+ * Znacznik „W trakcie pobierania” i pasek postępu na okładce kafelka.
+ * Dzięki temu kafelek nie wygląda na bezczynny, zanim nile/legendary poda pierwszy procent.
+ */
+function storeCardProgressHtml(store, g) {
+  const a = storeActive(store, g.id);
+  if (!a) return { badge: "", bar: "" };
+  const pct = a.percent == null ? null : Math.max(0, Math.min(a.percent, 100));
+  const badge = `<span class="game-state downloading" data-store-state>${esc(storeProgressLabel(pct))}</span>`;
+  const bar = `<div class="card-dl-bar"><div class="card-dl-fill" style="width:${pct == null ? 0 : pct}%"></div></div>`;
+  return { badge, bar };
+}
+
+/** Odświeża znacznik i pasek na kafelku bez przerysowywania siatki (stabilne klikanie). */
+function patchStoreCardProgress(store, gameId, a) {
+  const pct = a && a.percent != null ? Math.max(0, Math.min(a.percent, 100)) : null;
+  for (const card of document.querySelectorAll(`.game-card[data-store="${store}"]`)) {
+    if (card.dataset.gameId !== gameId) continue;
+    const fill = card.querySelector(".card-dl-fill");
+    if (fill && pct != null) fill.style.width = pct + "%";
+    const badge = card.querySelector("[data-store-state]");
+    if (badge) badge.textContent = storeProgressLabel(pct);
+  }
+}
+
 /** Kafelek gry Amazon: okładka zastępcza, tytuł, stan i akcje. */
 function amazonCardHtml(g) {
   const initial = (g.title || "?").trim().charAt(0).toUpperCase();
   const installed = g.installed && g.dirExists;
-  const badge = installed ? `<span class="game-state downloaded">${esc(t("amazon.installed"))}</span>` : "";
+  const progress = storeCardProgressHtml("prime", g);
+  const badge = installed ? `<span class="game-state downloaded">${esc(t("amazon.installed"))}</span>` : progress.badge;
   const primary = installed
     ? `<button class="btn btn-small btn-icon btn-primary" title="${esc(t("amazon.play"))}" aria-label="${esc(t("amazon.play"))}" data-amazon-launch="${esc(g.id)}">${icon("play")}</button>`
     : `<button class="btn btn-small btn-icon btn-primary" title="${esc(t("amazon.install"))}" aria-label="${esc(t("amazon.install"))}" data-amazon-install="${esc(g.id)}">${icon("download")}</button>`;
@@ -1047,8 +1107,8 @@ function amazonCardHtml(g) {
   const cover = g.coverUrl
     ? `<img src="${esc(g.coverUrl)}" alt="" loading="lazy" onerror="this.remove()">`
     : "";
-  return `<div class="game-card amazon-card" data-store="prime">
-    <div class="amazon-cover" aria-hidden="true"><span>${esc(initial)}</span>${cover}</div>
+  return `<div class="game-card amazon-card" data-store="prime" data-game-id="${esc(g.id)}">
+    <div class="amazon-cover" aria-hidden="true"><span>${esc(initial)}</span>${cover}${installed ? "" : progress.bar}</div>
     ${g.genre ? `<div class="game-card-genre">${esc(g.genre)}</div>` : ""}
     <div class="game-card-foot"><div class="game-card-title">${esc(g.title)}</div>${sizeTag(g.sizeBytes)}<span class="game-card-store">${esc(t("amazon.short"))}</span>${badge}</div>
     <div class="amazon-card-actions">${primary}${open}
@@ -1106,7 +1166,7 @@ function renderStoreDownloads() {
       </div>
       ${pct == null ? "" : `<div class="dl-progress-track"><div class="dl-progress-fill ${cls}" style="width:${pct}%"></div></div>`}
       <div class="dl-info">${sizes}<span class="dl-pct">${pct == null ? "" : pct.toFixed(1) + "%"}</span></div>
-      ${a.error ? `<div class="dl-error">${esc(a.error)}</div>` : `<div class="dl-path">${esc(a.line || "")}</div>`}
+      ${a.error ? `<div class="dl-error">${esc(a.error)}</div>` : `<div class="dl-path dl-path-store">${esc(a.line || "")}</div>`}
     </div>`;
   }).join("");
 }
@@ -1250,6 +1310,8 @@ async function amazonInstall(id) {
   }
   amazonActive.set(id, { title: g.title, percent: null, line: t("amazon.starting"), ok: null, error: "" });
   renderStoreDownloads();
+  // Kafelek od razu pokazuje „W trakcie pobierania” i pasek postępu.
+  renderAmazonGames();
   try {
     await invoke("amazon_install", { gameId: id });
     // Postęp jest w zakładce Pobierania — od razu ją pokazujemy (jak przy GOG).
@@ -1257,6 +1319,7 @@ async function amazonInstall(id) {
   } catch (e) {
     amazonActive.set(id, { title: g.title, percent: null, line: "", ok: false, error: String(e) });
     renderStoreDownloads();
+    renderAmazonGames();
   }
 }
 
@@ -1355,7 +1418,8 @@ function renderEpicStatus() {
 function epicCardHtml(g) {
   const initial = (g.title || "?").trim().charAt(0).toUpperCase();
   const installed = g.installed && g.dirExists;
-  const badge = installed ? `<span class="game-state downloaded">${esc(t("epic.installed"))}</span>` : "";
+  const progress = storeCardProgressHtml("epic", g);
+  const badge = installed ? `<span class="game-state downloaded">${esc(t("epic.installed"))}</span>` : progress.badge;
   const primary = installed
     ? `<button class="btn btn-small btn-icon btn-primary" title="${esc(t("epic.play"))}" aria-label="${esc(t("epic.play"))}" data-epic-launch="${esc(g.id)}">${icon("play")}</button>`
     : `<button class="btn btn-small btn-icon btn-primary" title="${esc(t("epic.install"))}" aria-label="${esc(t("epic.install"))}" data-epic-install="${esc(g.id)}">${icon("download")}</button>`;
@@ -1366,8 +1430,8 @@ function epicCardHtml(g) {
   const cover = g.coverUrl
     ? `<img src="${esc(g.coverUrl)}" alt="" loading="lazy" onerror="this.remove()">`
     : "";
-  return `<div class="game-card amazon-card" data-store="epic">
-    <div class="amazon-cover" aria-hidden="true"><span>${esc(initial)}</span>${cover}</div>
+  return `<div class="game-card amazon-card" data-store="epic" data-game-id="${esc(g.id)}">
+    <div class="amazon-cover" aria-hidden="true"><span>${esc(initial)}</span>${cover}${installed ? "" : progress.bar}</div>
     ${g.developer ? `<div class="game-card-genre">${esc(g.developer)}</div>` : ""}
     <div class="game-card-foot"><div class="game-card-title">${esc(g.title)}</div>${sizeTag(g.sizeBytes)}<span class="game-card-store">${esc(t("epic.short"))}</span>${badge}</div>
     <div class="amazon-card-actions">${primary}${open}
@@ -1557,6 +1621,8 @@ async function epicInstall(id) {
   }
   epicActive.set(id, { title: g.title, percent: null, line: t("amazon.starting"), ok: null, error: "" });
   renderStoreDownloads();
+  // Kafelek od razu pokazuje „W trakcie pobierania” i pasek postępu.
+  renderEpicGames();
   try {
     await invoke("epic_install", { gameId: id });
     // Postęp jest w zakładce Pobierania — od razu ją pokazujemy (jak przy GOG).
@@ -1564,6 +1630,7 @@ async function epicInstall(id) {
   } catch (e) {
     epicActive.set(id, { title: g.title, percent: null, line: "", ok: false, error: String(e) });
     renderStoreDownloads();
+    renderEpicGames();
   }
 }
 

@@ -1,8 +1,8 @@
 [package]
-name = "goglite"
+name = "gor-launcher"
 version = "0.1.0"
-description = "Lekki menedżer pobierania instalatorów offline GOG"
-authors = ["GOG Lite"]
+description = "GOR Launcher — lekki menedżer bibliotek GOG, Prime Gaming i Epic"
+authors = ["GOR Launcher"]
 license = "MIT"
 edition = "2021"
 

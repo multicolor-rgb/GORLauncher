@@ -1,4 +1,4 @@
-// goglite — biblioteka główna
+// GOR Launcher — biblioteka główna
 // Łączy wszystkie moduły i uruchamia aplikację Tauri.
 
 mod auth;
@@ -20,7 +20,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::Manager;
 
-pub const USER_AGENT: &str = concat!("goglite/", env!("CARGO_PKG_VERSION"), " (+https://github.com/example/goglite)");
+pub const USER_AGENT: &str = concat!("gor-launcher/", env!("CARGO_PKG_VERSION"), " (+https://github.com/multicolor-rgb/goglite)");
 
 /// Pobiera ścieżkę katalogu danych aplikacji.
 fn data_dir() -> PathBuf {

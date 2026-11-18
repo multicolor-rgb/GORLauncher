@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>goglite — instalatory offline GOG</title>
+  <title>GOR Launcher — instalatory offline GOG</title>
   <link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
@@ -11,10 +11,12 @@
     <!-- ============ SIDEBAR ============ -->
     <aside id="sidebar">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true">▚</span>
-        <span class="brand-name">goglite</span>
+        <span class="brand-mark" aria-hidden="true">G</span>
+        <span class="brand-text">
+          <span class="brand-name">GOR</span>
+          <span class="brand-tag">Launcher</span>
+        </span>
       </div>
-      <p class="brand-sub" data-i18n="app.tagline">Menedżer instalatorów offline</p>
 
       <nav class="side-nav">
         <button id="nav-games" class="nav-item active">
@@ -69,7 +71,7 @@
                  data-i18n-placeholder="topbar.search" placeholder="Szukaj w bibliotece…" />
         </div>
         <div class="topbar-actions">
-          <span class="topbar-hud">goglite / catalog</span>
+          <span class="topbar-hud">GOR / catalog</span>
           <button id="btn-settings" class="icon-btn" data-i18n-title="nav.settings"
                   title="Ustawienia" aria-label="Ustawienia">⚙</button>
         </div>
@@ -85,7 +87,7 @@
 
           <div id="welcome" class="welcome">
             <p class="eyebrow"><span class="eyebrow-num">00</span><span class="eyebrow-sep">/</span><span data-i18n="hud.auth">Dostęp</span></p>
-            <h3 class="welcome-title" data-i18n="welcome.title">Witaj w goglite</h3>
+            <h3 class="welcome-title" data-i18n="welcome.title">Witaj w GOR Launcher</h3>
             <p data-i18n="welcome.desc1">Lekki menedżer pobierania instalatorów offline z GOG.com.</p>
             <p data-i18n="welcome.desc2">Zaloguj się przez okno GOG, a następnie zsynchronizuj bibliotekę.</p>
             <button id="btn-login" class="btn btn-primary btn-large" data-i18n="welcome.login">Zaloguj przez GOG</button>
@@ -103,19 +105,22 @@
           <section id="game-section" class="hidden">
             <div class="section-header">
               <p class="eyebrow"><span class="eyebrow-num">02</span><span class="eyebrow-sep">/</span><span data-i18n="hud.catalog">Katalog</span></p>
-              <span class="count"><span id="game-count"></span> <span data-i18n="library.countLabel">pozycji</span></span>
+              <span class="count"><span id="game-count"></span> <span data-i18n="library.countLabel">pozycji</span><span id="dupes-note" class="count-note hidden"></span></span>
             </div>
-            <div class="platform-filter" id="store-filter">
-              <button class="chip active" data-store-filter="all" data-i18n="filter.all">Wszystkie</button>
-              <button class="chip" data-store-filter="gog" data-i18n="nav.gog">GOG</button>
-              <button class="chip" data-store-filter="prime" data-i18n="nav.amazon">Prime Gaming</button>
-              <button class="chip" data-store-filter="epic" data-i18n="nav.epic">Epic Games</button>
-            </div>
-            <div class="platform-filter" id="platform-filter">
-              <button class="chip active" data-platform="all" data-i18n="filter.all">Wszystkie</button>
-              <button class="chip" data-platform="windows" data-i18n="filter.windows">Windows</button>
-              <button class="chip" data-platform="linux" data-i18n="filter.linux">Linux</button>
-              <button class="chip" data-platform="macos" data-i18n="filter.macos">macOS</button>
+            <div class="library-bar">
+              <div class="platform-filter" id="store-filter">
+                <button class="chip active" data-store-filter="all" data-i18n="filter.all">Wszystkie</button>
+                <button class="chip" data-store-filter="gog" data-i18n="nav.gog">GOG</button>
+                <button class="chip" data-store-filter="prime" data-i18n="nav.amazon">Prime Gaming</button>
+                <button class="chip" data-store-filter="epic" data-i18n="nav.epic">Epic Games</button>
+              </div>
+              <div class="library-tools">
+                <div class="platform-filter" id="library-sort">
+                  <button class="chip active" data-sort="added" data-i18n="library.sort.added">Najnowsze</button>
+                  <button class="chip" data-sort="installed" data-i18n="library.sort.installed">Zainstalowane</button>
+                </div>
+                <button class="chip" id="btn-hide-dupes" aria-pressed="false" data-i18n="library.hideDuplicates">Ukryj duplikaty</button>
+              </div>
             </div>
             <div id="game-grid" class="game-grid"></div>
           </section>
@@ -135,12 +140,6 @@
             </div>
             <p class="view-sub" data-i18n="gog.sub">Biblioteka GOG — instalatory offline, instalacja i uruchamianie wprost z aplikacji.</p>
           </header>
-          <div class="platform-filter" id="gog-platform-filter">
-            <button class="chip active" data-platform="all" data-i18n="filter.all">Wszystkie</button>
-            <button class="chip" data-platform="windows" data-i18n="filter.windows">Windows</button>
-            <button class="chip" data-platform="linux" data-i18n="filter.linux">Linux</button>
-            <button class="chip" data-platform="macos" data-i18n="filter.macos">macOS</button>
-          </div>
           <div id="gog-empty" class="empty-state hidden"></div>
           <div id="gog-grid" class="game-grid hidden"></div>
         </section>

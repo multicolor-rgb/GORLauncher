@@ -12,6 +12,7 @@
   --font-display: 'Archivo', 'Segoe UI', system-ui, sans-serif;
   --font-sans: 'Archivo', 'Segoe UI', system-ui, sans-serif;
   --mono: 'Geist Mono', 'Cascadia Code', ui-monospace, monospace;
+  --font-pixel: 'Silkscreen', ui-monospace, monospace;
 
   /* — layout — */
   --sidebar-w: 226px;
@@ -98,34 +99,36 @@ body {
   z-index: 60;
 }
 
-.brand { display: flex; align-items: center; gap: 9px; }
+.brand { display: flex; align-items: center; gap: 10px; }
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  font-size: .7rem;
+  width: 26px;
+  height: 26px;
+  font-family: var(--font-pixel);
+  font-size: .82rem;
   line-height: 1;
   background: var(--ink);
   color: var(--bg);
 }
+/* Logotyp: GOR w Silkscreen + „launcher” w rozstrzelonym mono. */
+.brand-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .brand-name {
-  font-family: var(--font-display);
-  font-size: .84rem;
-  font-weight: 620;
-  letter-spacing: .2em;
+  font-family: var(--font-pixel);
+  font-size: .95rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 1;
   text-transform: uppercase;
 }
-.brand-sub {
-  margin-top: 8px;
+.brand-tag {
   font-family: var(--mono);
-  font-size: .58rem;
-  line-height: 1.5;
-  letter-spacing: .11em;
+  font-size: .5rem;
+  line-height: 1;
+  letter-spacing: .28em;
   text-transform: uppercase;
   color: var(--faint);
 }
-
 .side-nav { display: flex; flex-direction: column; margin-top: 30px; }
 
 .nav-item {
@@ -394,7 +397,7 @@ body {
 .sync-bar progress::-webkit-progress-value { background: var(--ink); }
 
 /* ====================== BIBLIOTEKA ====================== */
-.section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.section-header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
 .section-header .eyebrow { margin-bottom: 0; }
 .count {
   margin-left: auto;
@@ -406,6 +409,18 @@ body {
 }
 
 .platform-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+/* Pasek Biblioteki: filtry sklepu po lewej, sortowanie i duplikaty po prawej — jedna linia. */
+.library-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 16px; }
+.library-bar .platform-filter { margin-bottom: 0; }
+.library-tools { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.count-note {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: .52rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
 .chip {
   font-family: var(--mono);
   font-size: .58rem;
@@ -487,19 +502,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.game-card-platforms { position: absolute; top: 8px; right: 8px; z-index: 1; display: flex; gap: 4px; }
-.plat-tag {
-  padding: 3px 5px;
-  font-family: var(--mono);
-  font-size: .5rem;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--on-image);
-  background: var(--scrim);
-  border: var(--line-w) solid var(--line-strong);
-  backdrop-filter: blur(4px);
-}
-
 .empty-state {
   padding: 28px 20px;
   border: var(--line-w) dashed var(--line);
@@ -892,8 +894,10 @@ dialog#game-modal:not([open]) { display: none; }
 }
 
 /* ---------- stan plików gry (kafelek + instalatory) ---------- */
-.game-card-foot { display: flex; align-items: center; gap: 8px; padding: 11px 12px 12px; }
-.game-card-foot .game-card-title { flex: 1; min-width: 0; padding: 0; }
+/* Tytuł ma własny wiersz, metadane (waga, sklep, stan) idą pod nim —
+   dzięki temu długie znaczniki nie ściskają tytułu do „F…”. */
+.game-card-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 11px 12px 12px; }
+.game-card-foot .game-card-title { flex: 1 1 100%; min-width: 0; padding: 0; }
 /* Waga instalacji na kafelku gry. */
 .game-card-size {
   font-family: var(--mono);
@@ -965,6 +969,9 @@ dialog#game-modal:not([open]) { display: none; }
   word-break: break-all;
 }
 .dl-missing { margin-top: 9px; font-family: var(--mono); font-size: .58rem; color: var(--red); }
+/* Wpis pobierania ze sklepu (Prime/Epic) nie ma wiersza nazwy pliku,
+   więc log nie może wjeżdżać na wiersz z rozmiarami (ujemny margines .dl-path). */
+.dl-path.dl-path-store { margin: 9px 0 0; }
 .dl-status.missing { color: var(--red); }
 .dl-progress-fill.missing { background: var(--red); }
 
@@ -1046,12 +1053,28 @@ dialog#game-modal:not([open]) { display: none; }
   gap: 6px;
   padding: 0 12px 12px;
 }
+/* Postęp instalacji sklepu (Prime/Epic) — pasek na dolnej krawędzi okładki. */
+.card-dl-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  height: 4px;
+  background: var(--line);
+}
+.card-dl-fill {
+  height: 100%;
+  width: 0;
+  background: var(--blue);
+  transition: width .3s linear;
+}
 
 /* ====================== RESPONSYW ====================== */
 @media (max-width: 880px) {
   :root { --sidebar-w: 66px; }
   #sidebar { padding: 18px 12px 14px; align-items: center; }
-  .brand-name, .brand-sub, .nav-label, .side-meta { display: none; }
+  .brand-text, .nav-label, .side-meta { display: none; }
   .brand { justify-content: center; }
   .side-nav { width: 100%; margin-top: 22px; }
   .nav-item { justify-content: center; gap: 0; padding: 12px 0; }

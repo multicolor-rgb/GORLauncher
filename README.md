@@ -1,4 +1,4 @@
-# goglite
+# GOR Launcher
 
 **Polski** · [English](README.en.md)
 
@@ -23,7 +23,7 @@ i kolejka pobrań są puste.*
 - **Instalatory** per gra, filtrowane po systemie; kolejka pobrań z postępem, wstrzymywaniem
   i anulowaniem.
 - **Instalacja i granie wprost z aplikacji** — pobrany instalator GOG można uruchomić cicho
-  (bez kreatora), a gotową grę uruchomić przyciskiem **Uruchom** z poziomu goglite.
+  (bez kreatora), a gotową grę uruchomić przyciskiem **Uruchom** z poziomu GOR Launcher.
 - **Dwa motywy** (ciemny/jasny) i **dwa języki** (polski/angielski) — zmiana natychmiastowa,
   zapisywana w ustawieniach.
 - **Osobny folder dla każdej gry** — wybierany przy pierwszym pobraniu; aplikacja sprawdza,
