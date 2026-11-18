@@ -273,7 +273,8 @@ body {
 .btn-small { padding: 4px 8px; font-size: .55rem; letter-spacing: .09em; }
 /* Mniejszy przycisk z samą ikoną (folder, pobierz, uruchom, pauza). */
 .btn-icon { width: 24px; height: 24px; padding: 0; display: inline-grid; place-items: center; }
-.btn-icon .ico, .btn-icon .ico svg { width: 13px; height: 13px; display: block; }
+.btn-icon .ico { display: grid; place-items: center; line-height: 0; }
+.btn-icon .ico, .btn-icon .ico svg { width: 14px; height: 14px; display: block; }
 .btn-large { width: 100%; padding: 12px 18px; margin-top: 22px; }
 
 .badge {
@@ -864,6 +865,8 @@ dialog#game-modal:not([open]) { display: none; }
 }
 .installer-main { flex: 1; min-width: 0; }
 .installer-item .btn { padding: 7px 11px; font-size: .56rem; }
+/* Przycisk z samą ikoną nie może dziedziczyć paddingu tekstowego — ikona wychodziła z ramki. */
+.installer-item .btn-icon { padding: 0; }
 .installer-item h4 {
   font-size: .78rem;
   font-weight: 500;
@@ -898,6 +901,9 @@ dialog#game-modal:not([open]) { display: none; }
    dzięki temu długie znaczniki nie ściskają tytułu do „F…”. */
 .game-card-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 11px 12px 12px; }
 .game-card-foot .game-card-title { flex: 1 1 100%; min-width: 0; padding: 0; }
+/* Przycisk „Uruchom” w stopce kafelka (GOG) — niższy, żeby nie podnosił wiersza siatki. */
+.game-card-foot .btn-icon { width: 20px; height: 20px; }
+.game-card-foot .btn-icon .ico, .game-card-foot .btn-icon .ico svg { width: 11px; height: 11px; }
 /* Waga instalacji na kafelku gry. */
 .game-card-size {
   font-family: var(--mono);

@@ -150,12 +150,7 @@ async function init() {
   d.syncBtn.addEventListener("click", sync);
   // Kafelki Biblioteki pochodzą z trzech sklepów — kliknięcie obsługujemy zależnie od sklepu.
   d.gameGrid.addEventListener("click", onLibraryGridClick);
-  d.gogGrid.addEventListener("click", (e) => {
-    const card = e.target.closest("[data-game-id]");
-    if (!card) return;
-    const g = gamesCache.find((x) => String(x.id) === card.getAttribute("data-game-id"));
-    if (g) openGame(g);
-  });
+  d.gogGrid.addEventListener("click", onGogCardClick);
   if (d.storeFilter) {
     d.storeFilter.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-store-filter]");
@@ -423,7 +418,8 @@ async function loadGames() {
 const ICONS = {
   folder: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h4l1.5 2h7.5v7h-13z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
   play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.5l9 5.5-9 5.5z" fill="currentColor"/></svg>',
-  download: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m0 0l3.2-3.2M8 10L4.8 6.8M2.5 13.5h11" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="square"/></svg>',
+  // Pełna (wypełniona) strzałka + kreska — czytelna także w 13 px na przycisku ikonowym.
+  download: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.1 2h1.8v5.6h2.7L8 11.8 4.4 7.6h2.7z" fill="currentColor"/><path d="M2.6 12.4h10.8v1.6H2.6z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="3" width="2.6" height="10" fill="currentColor"/><rect x="9.4" y="3" width="2.6" height="10" fill="currentColor"/></svg>',
   stop: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
 };
@@ -451,10 +447,14 @@ function gogCardHtml(g) {
     ? `<img class="game-card-cover" src="${esc(src)}" alt="${esc(g.title)}" loading="lazy">`
     : `<div class="game-card-fallback">\uD83C\uDFAE</div>`;
   const genre = g.genre ? `<div class="game-card-genre">${esc(g.genre)}</div>` : "";
+  // Gra zainstalowana z aplikacji dostaje na kafelku przycisk „Uruchom”, jak w Prime i Epic.
+  const play = g.launchExe
+    ? `<button class="btn btn-small btn-icon btn-primary" title="${esc(t("gog.play"))}" aria-label="${esc(t("gog.play"))}" data-gog-launch="${esc(g.id)}">${icon("play")}</button>`
+    : "";
   return `<div class="game-card" data-store="gog" data-game-id="${esc(g.id)}">` +
     `${img}${genre}` +
     `<div class="game-card-foot"><div class="game-card-title">${esc(g.title)}</div>` +
-    `${sizeTag(g.sizeBytes)}<span class="game-card-store">GOG</span>${gameStateTagHtml(g.id)}</div></div>`;
+    `${sizeTag(g.sizeBytes)}<span class="game-card-store">GOG</span>${gameStateTagHtml(g.id)}${play}</div></div>`;
 }
 
 /** Czy gra pasuje do wyszukiwarki. Aplikacja jest windowsowa, więc platform nie filtrujemy. */
@@ -790,6 +790,15 @@ async function onLibraryGridClick(e) {
   const store = card.getAttribute("data-store");
   if (store === "prime") return onAmazonGridClick(e);
   if (store === "epic") return onEpicGridClick(e);
+  return onGogCardClick(e);
+}
+
+/** Klik na kafelku GOG: przycisk „Uruchom” ma pierwszeństwo przed otwarciem modala. */
+function onGogCardClick(e) {
+  const launch = e.target.closest("[data-gog-launch]");
+  if (launch) { gogLaunch(launch.getAttribute("data-gog-launch")); return; }
+  const card = e.target.closest("[data-game-id]");
+  if (!card) return;
   const g = gamesCache.find((x) => String(x.id) === card.getAttribute("data-game-id"));
   if (g) openGame(g);
 }
