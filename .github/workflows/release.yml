@@ -1,0 +1,47 @@
+name: Release
+
+# Buduje instalator Windows i publikuje go jako wydanie GitHub.
+# Uruchamiane po wypchnięciu taga v* (np. v0.1.0) albo ręcznie z zakładki Actions.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Instalacja zależności frontendu
+        run: npm ci
+
+      - name: Build i publikacja wydania
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "GOR Launcher v__VERSION__"
+          releaseBody: |
+            Instalator GOR Launcher w wersji v__VERSION__.
+
+            - `GOR Launcher___VERSION___x64-setup.exe` — instalator NSIS (zalecany)
+            - `GOR Launcher___VERSION___x64_en-US.msi` — pakiet MSI
+          releaseDraft: false
+          prerelease: false

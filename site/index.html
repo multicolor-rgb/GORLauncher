@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pl" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GOR Launcher — biblioteka GOG, Prime i Epic w jednym miejscu</title>
+  <meta name="description" content="GOR Launcher to desktopowy launcher na Windows: instalatory offline GOG, biblioteka Prime Gaming i Epic Games oraz pobieranie i uruchamianie gier z jednego okna.">
+  <link rel="icon" href="img/icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="./">
+      <span class="brand-mark">G</span>
+      <span class="brand-text"><span class="brand-gor">GOR</span><span class="brand-sub">LAUNCHER</span></span>
+    </a>
+    <nav class="bar-nav">
+      <a href="#funkcje">FUNKCJE</a>
+      <a href="#pobierz">POBRANIE</a>
+      <a href="https://github.com/multicolor-rgb/goglite" target="_blank" rel="noopener">GITHUB ↗</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">WINDOWS · TAURI · RUST</p>
+      <h1>Twoje gry z GOG, Prime i Epic<br>w jednej bibliotece.</h1>
+      <p class="lead">
+        GOR Launcher (dawniej goglite) trzyma instalatory offline GOG, gry z Prime Gaming
+        i Epic Games w jednym miejscu — z pobieraniem, instalacją i przyciskiem „Uruchom”
+        bez wychodzenia z aplikacji.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/multicolor-rgb/goglite/releases/latest">POBIERZ INSTALATOR</a>
+        <a class="btn" href="#funkcje">ZOBACZ FUNKCJE</a>
+      </div>
+      <p class="hint">Windows 10/11 (x64) · instalator NSIS i MSI · wersja 0.1.0</p>
+    </section>
+
+    <figure class="shot">
+      <img src="img/library-dark.png" alt="Biblioteka gier w GOR Launcher" loading="lazy">
+      <figcaption>Biblioteka: wszystkie sklepy, filtr „tylko zainstalowane” i scalone duplikaty.</figcaption>
+    </figure>
+
+    <section id="funkcje" class="features">
+      <article>
+        <span class="idx">01</span>
+        <h2>Instalatory GOG</h2>
+        <p>Przeglądarka biblioteki GOG, lista instalatorów offline, pobieranie z pauzą oraz cicha instalacja z poziomu aplikacji.</p>
+      </article>
+      <article>
+        <span class="idx">02</span>
+        <h2>Prime i Epic</h2>
+        <p>Logowanie konta Amazon Games (nile) i Epic (legendary), podgląd biblioteki oraz instalacja z postępem widocznym na kafelku gry.</p>
+      </article>
+      <article>
+        <span class="idx">03</span>
+        <h2>Jeden launcher</h2>
+        <p>Wspólna siatka gier, wyszukiwarka, sortowanie, ukrywanie duplikatów między sklepami i uruchamianie zainstalowanych tytułów.</p>
+      </article>
+    </section>
+
+    <section id="pobierz" class="download">
+      <h2>Pobierz GOR Launcher</h2>
+      <p>Wydania zawierają instalator NSIS (<code>-setup.exe</code>) oraz pakiet MSI. Pliki są budowane z tego repozytorium.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/multicolor-rgb/goglite/releases/latest">NAJNOWSZE WYDANIE</a>
+        <a class="btn" href="https://github.com/multicolor-rgb/goglite/releases">WSZYSTKIE WYDANIA</a>
+      </div>
+      <p class="hint">Biblioteka i ustawienia są trzymane w <code>%APPDATA%\goglite</code>, więc aktualizacja nie kasuje danych.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>GOR Launcher · open source na licencji repozytorium</span>
+    <a href="https://github.com/multicolor-rgb/goglite">github.com/multicolor-rgb/goglite</a>
+  </footer>
+</body>
+</html>
