@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GOR Launcher — biblioteka GOG, Prime i Epic w jednym miejscu</title>
-  <meta name="description" content="GOR Launcher to desktopowy launcher na Windows: instalatory offline GOG, biblioteka Prime Gaming i Epic Games oraz pobieranie i uruchamianie gier z jednego okna.">
+  <title>GOR Launcher — biblioteka GOG, Prime i Epic w jednym oknie</title>
+  <meta name="description" content="GOR Launcher (dawniej goglite) to launcher na Windows: instalatory offline GOG, biblioteka Prime Gaming i Epic Games, pobieranie, instalacja i przycisk Uruchom w jednym miejscu.">
+  <meta property="og:title" content="GOR Launcher — biblioteka GOG, Prime i Epic">
+  <meta property="og:description" content="Jeden launcher do bibliotek GOG, Prime Gaming i Epic Games. Instalatory offline, kolejka pobrań i uruchamianie gier bez klientów sklepów.">
+  <meta property="og:image" content="img/library-dark.png">
   <link rel="icon" href="img/icon.png">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -16,64 +19,261 @@
     </a>
     <nav class="bar-nav">
       <a href="#funkcje">FUNKCJE</a>
-      <a href="#pobierz">POBRANIE</a>
-      <a href="https://github.com/multicolor-rgb/goglite" target="_blank" rel="noopener">GITHUB ↗</a>
+      <a href="#widoki">WIDOKI</a>
+      <a href="#start">JAK ZACZĄĆ</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/multicolor-rgb/GORLauncher" target="_blank" rel="noopener">GITHUB ↗</a>
     </nav>
+    <a class="btn btn-primary btn-sm bar-cta" href="https://github.com/multicolor-rgb/GORLauncher/releases/latest">Pobierz</a>
   </header>
 
   <main>
+    <!-- ============================ HERO ============================ -->
     <section class="hero">
-      <p class="eyebrow">WINDOWS · TAURI · RUST</p>
-      <h1>Twoje gry z GOG, Prime i Epic<br>w jednej bibliotece.</h1>
-      <p class="lead">
-        GOR Launcher (dawniej goglite) trzyma instalatory offline GOG, gry z Prime Gaming
-        i Epic Games w jednym miejscu — z pobieraniem, instalacją i przyciskiem „Uruchom”
-        bez wychodzenia z aplikacji.
-      </p>
-      <div class="cta">
-        <a class="btn btn-primary" href="https://github.com/multicolor-rgb/goglite/releases/latest">POBIERZ INSTALATOR</a>
-        <a class="btn" href="#funkcje">ZOBACZ FUNKCJE</a>
+      <div class="hero-copy">
+        <p class="eyebrow">WINDOWS 10/11 · TAURI 2 + RUST · OPEN SOURCE</p>
+        <h1>Wszystkie Twoje gry.<br><span class="accent">Jeden launcher.</span></h1>
+        <p class="lead">
+          GOR Launcher trzyma biblioteki <strong>GOG</strong>, <strong>Prime Gaming</strong> i
+          <strong>Epic Games</strong> w jednym oknie: instalatory offline, kolejka pobrań,
+          cicha instalacja i przycisk <em>Uruchom</em> — bez klienta Galaxy i bez sklepowych aplikacji.
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" href="https://github.com/multicolor-rgb/GORLauncher/releases/latest">
+            Pobierz instalator
+          </a>
+          <a class="btn" href="#widoki">Zobacz widoki</a>
+        </div>
+        <ul class="stats">
+          <li><b>3</b><span>sklepy w jednej bibliotece</span></li>
+          <li><b>2</b><span>motywy: ciemny i jasny</span></li>
+          <li><b>PL/EN</b><span>interfejs i przełącznik</span></li>
+          <li><b>4,5 MB</b><span>instalator NSIS</span></li>
+        </ul>
       </div>
-      <p class="hint">Windows 10/11 (x64) · instalator NSIS i MSI · wersja 0.1.0</p>
+      <figure class="hero-shot">
+        <img src="img/library-dark.png" alt="Biblioteka gier w GOR Launcher z grami z GOG, Prime Gaming i Epic Games" width="1280" height="672">
+        <figcaption>Biblioteka: gry z trzech sklepów, filtr sklepu, sortowanie i ukrywanie duplikatów.</figcaption>
+      </figure>
     </section>
 
-    <figure class="shot">
-      <img src="img/library-dark.png" alt="Biblioteka gier w GOR Launcher" loading="lazy">
-      <figcaption>Biblioteka: wszystkie sklepy, filtr „tylko zainstalowane” i scalone duplikaty.</figcaption>
-    </figure>
+    <!-- ============================ FUNKCJE ============================ -->
+    <section id="funkcje" class="section">
+      <header class="section-head">
+        <p class="eyebrow">01 — FUNKCJE</p>
+        <h2>Co potrafi GOR Launcher</h2>
+        <p class="section-sub">Wszystko, co potrzebne do przeglądania, pobierania i uruchamiania gier — w jednym miejscu, bez terminala.</p>
+      </header>
 
-    <section id="funkcje" class="features">
-      <article>
-        <span class="idx">01</span>
-        <h2>Instalatory GOG</h2>
-        <p>Przeglądarka biblioteki GOG, lista instalatorów offline, pobieranie z pauzą oraz cicha instalacja z poziomu aplikacji.</p>
-      </article>
-      <article>
-        <span class="idx">02</span>
-        <h2>Prime i Epic</h2>
-        <p>Logowanie konta Amazon Games (nile) i Epic (legendary), podgląd biblioteki oraz instalacja z postępem widocznym na kafelku gry.</p>
-      </article>
-      <article>
-        <span class="idx">03</span>
-        <h2>Jeden launcher</h2>
-        <p>Wspólna siatka gier, wyszukiwarka, sortowanie, ukrywanie duplikatów między sklepami i uruchamianie zainstalowanych tytułów.</p>
-      </article>
+      <div class="features">
+        <article>
+          <span class="idx">01</span>
+          <h3>Biblioteka wszystkich sklepów</h3>
+          <p>GOG, Prime Gaming i Epic Games w jednej siatce. Wyszukiwarka, filtr sklepu, sortowanie oraz ukrywanie duplikatów — ta sama gra zostaje raz, z pierwszeństwem dla zainstalowanej.</p>
+        </article>
+        <article>
+          <span class="idx">02</span>
+          <h3>Instalatory offline GOG</h3>
+          <p>Przeglądarka biblioteki GOG z listą instalatorów: platforma, waga, wersja i język. Pobieranie z pauzą, wznowieniem i anulowaniem.</p>
+        </article>
+        <article>
+          <span class="idx">03</span>
+          <h3>Instalacja i „Uruchom”</h3>
+          <p>Pobrany instalator instaluje się cicho w wybranym folderze, a gotowa gra dostaje na kafelku przycisk <em>Uruchom</em> — jak w Prime i Epic.</p>
+        </article>
+        <article>
+          <span class="idx">04</span>
+          <h3>Prime Gaming</h3>
+          <p>Logowanie kontem Amazon, biblioteka z klienta Amazon Games (z okładkami), pobieranie do wybranego folderu i uruchamianie przez <code>nile</code>.</p>
+        </article>
+        <article>
+          <span class="idx">05</span>
+          <h3>Epic Games</h3>
+          <p>Konto Epic, biblioteka Epic Games Store i pobieranie przez <code>legendary</code>. Brakujące narzędzie instalujesz jednym przyciskiem z aplikacji.</p>
+        </article>
+        <article>
+          <span class="idx">06</span>
+          <h3>Kolejka pobrań</h3>
+          <p>Postęp, procent i rozmiar „pobrane / całość” dla GOG, Prime i Epic. Pasek postępu widać też na kafelku gry, więc nie musisz wchodzić w Pobierania.</p>
+        </article>
+        <article>
+          <span class="idx">07</span>
+          <h3>Motywy i języki</h3>
+          <p>Ciemny i jasny motyw oraz polski i angielski interfejs. Zmiana działa natychmiast i zapisuje się w ustawieniach.</p>
+        </article>
+        <article>
+          <span class="idx">08</span>
+          <h3>Folder dla każdej gry</h3>
+          <p>Każda gra może mieć własny katalog. Aplikacja sprawdza, czy pliki nadal są na dysku, i oznacza grę jako <em>Pobrane</em>, <em>W trakcie</em> lub <em>Brak pliku</em>.</p>
+        </article>
+      </div>
+
+      <div class="chips">
+        <span>Pliki instalacyjne offline</span>
+        <span>Szczegóły gry i zrzuty ekranu</span>
+        <span>Wznawianie pobrań</span>
+        <span>Wykrywanie braków na dysku</span>
+        <span>Bez terminala</span>
+        <span>Dane lokalnie w <code>%APPDATA%\goglite</code></span>
+      </div>
     </section>
 
+    <!-- ============================ WIDOKI ============================ -->
+    <section id="widoki" class="section">
+      <header class="section-head">
+        <p class="eyebrow">02 — WIDOKI</p>
+        <h2>Jak wygląda aplikacja</h2>
+        <p class="section-sub">Zrzuty z interfejsu (przykładowa biblioteka, dane demonstracyjne). Kliknij obraz, aby otworzyć w pełnej rozdzielczości.</p>
+      </header>
+
+      <div class="gallery">
+        <figure class="tile wide">
+          <a href="img/library-light.png" target="_blank" rel="noopener">
+            <img src="img/library-light.png" alt="Biblioteka w jasnym motywie" loading="lazy">
+          </a>
+          <figcaption><b>Biblioteka — motyw jasny</b><span>Ta sama siatka, filtry i kafelki z akcjami w jasnym motywie.</span></figcaption>
+        </figure>
+        <figure class="tile">
+          <a href="img/prime-dark.png" target="_blank" rel="noopener">
+            <img src="img/prime-dark.png" alt="Widok Prime Gaming" loading="lazy">
+          </a>
+          <figcaption><b>Prime Gaming</b><span>Konto Amazon, biblioteka z okładkami i akcje: Uruchom, folder gry, folder docelowy.</span></figcaption>
+        </figure>
+        <figure class="tile">
+          <a href="img/downloads-dark.png" target="_blank" rel="noopener">
+            <img src="img/downloads-dark.png" alt="Widok Pobierania z kolejką" loading="lazy">
+          </a>
+          <figcaption><b>Pobierania</b><span>Wspólna kolejka GOG, Prime i Epic: postęp, rozmiary, pauza i anulowanie.</span></figcaption>
+        </figure>
+        <figure class="tile">
+          <a href="img/settings-dark.png" target="_blank" rel="noopener">
+            <img src="img/settings-dark.png" alt="Widok Ustawienia" loading="lazy">
+          </a>
+          <figcaption><b>Ustawienia</b><span>Język, motyw i domyślny folder zapisu instalatorów.</span></figcaption>
+        </figure>
+        <figure class="tile">
+          <a href="img/library-dark.png" target="_blank" rel="noopener">
+            <img src="img/library-dark.png" alt="Biblioteka w ciemnym motywie" loading="lazy">
+          </a>
+          <figcaption><b>Biblioteka — motyw ciemny</b><span>Kafelki pokazują wagę gry, sklep i stan: zainstalowana, pobrane, w trakcie.</span></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ============================ START ============================ -->
+    <section id="start" class="section">
+      <header class="section-head">
+        <p class="eyebrow">03 — JAK ZACZĄĆ</p>
+        <h2>Od instalacji do grania</h2>
+      </header>
+      <ol class="steps">
+        <li>
+          <span class="step-no">1</span>
+          <h3>Zainstaluj aplikację</h3>
+          <p>Pobierz <code>…-setup.exe</code> (NSIS) albo <code>.msi</code> z najnowszego wydania i uruchom instalator. Windows 10/11 x64, WebView2 jest już w systemie.</p>
+        </li>
+        <li>
+          <span class="step-no">2</span>
+          <h3>Zaloguj sklepy</h3>
+          <p>GOG loguje się w osobnym oknie (OAuth). Prime Gaming i Epic wymagają konta Amazon/Epic — narzędzia <code>nile</code> i <code>legendary</code> aplikacja instaluje jednym przyciskiem.</p>
+        </li>
+        <li>
+          <span class="step-no">3</span>
+          <h3>Pobieraj i graj</h3>
+          <p>Wybierz grę, ustaw folder i pobierz instalator. Po instalacji kafelek dostaje przycisk <em>Uruchom</em> — bez opuszczania launchera.</p>
+        </li>
+      </ol>
+
+      <div class="info-grid">
+        <div class="info-card">
+          <h3>Wymagania</h3>
+          <ul>
+            <li>Windows 10 lub 11 (x64)</li>
+            <li>WebView2 (domyślnie w systemie)</li>
+            <li>Prime Gaming: <code>nile</code> — instalacja z aplikacji</li>
+            <li>Epic Games: <code>legendary</code> — instalacja z aplikacji</li>
+          </ul>
+        </div>
+        <div class="info-card">
+          <h3>Dane na dysku</h3>
+          <ul>
+            <li>Biblioteka i ustawienia: <code>%APPDATA%\goglite</code></li>
+            <li>Pliki: <code>goglite.db</code>, <code>auth.json</code>, <code>settings.json</code></li>
+            <li>Domyślny folder pobrań zmienisz w Ustawieniach</li>
+            <li>Aktualizacja aplikacji nie kasuje biblioteki</li>
+          </ul>
+        </div>
+        <div class="info-card">
+          <h3>Techniczne</h3>
+          <ul>
+            <li>Tauri 2 + Rust, frontend w Vite</li>
+            <li>Baza SQLite, tokeny w pliku z uprawnieniami 600</li>
+            <li>Fonty i ikony lokalnie — działa offline</li>
+            <li>Wydania buduje GitHub Actions przy tagu <code>v*</code></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ POBRANIE ============================ -->
     <section id="pobierz" class="download">
-      <h2>Pobierz GOR Launcher</h2>
-      <p>Wydania zawierają instalator NSIS (<code>-setup.exe</code>) oraz pakiet MSI. Pliki są budowane z tego repozytorium.</p>
-      <div class="cta">
-        <a class="btn btn-primary" href="https://github.com/multicolor-rgb/goglite/releases/latest">NAJNOWSZE WYDANIE</a>
-        <a class="btn" href="https://github.com/multicolor-rgb/goglite/releases">WSZYSTKIE WYDANIA</a>
+      <div>
+        <p class="eyebrow">04 — WYDANIA</p>
+        <h2>Pobierz GOR Launcher</h2>
+        <p>Instalator NSIS jest zalecany — sam tworzy skróty i wpis w „Aplikacje”. Pakiet MSI wybierz, jeśli wolisz instalację przez GPO/Intune.</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="https://github.com/multicolor-rgb/GORLauncher/releases/latest">Najnowsze wydanie</a>
+          <a class="btn" href="https://github.com/multicolor-rgb/GORLauncher/releases">Wszystkie wydania</a>
+        </div>
       </div>
-      <p class="hint">Biblioteka i ustawienia są trzymane w <code>%APPDATA%\goglite</code>, więc aktualizacja nie kasuje danych.</p>
+      <div class="asset-card">
+        <div class="asset-row">
+          <b>GOR.Launcher_0.1.0_x64-setup.exe</b>
+          <span>NSIS · 4,5 MB · zalecany</span>
+        </div>
+        <div class="asset-row">
+          <b>GOR.Launcher_0.1.0_x64_en-US.msi</b>
+          <span>MSI · 6,4 MB · instalacja zarządzana</span>
+        </div>
+        <p class="asset-note">Nazwy plików w wydaniu mogą zawierać podkreślenia i numer wersji. Wersja w aplikacji: <b>0.1.0</b>.</p>
+      </div>
+    </section>
+
+    <!-- ============================ FAQ ============================ -->
+    <section id="faq" class="section section-faq">
+      <header class="section-head">
+        <p class="eyebrow">05 — FAQ</p>
+        <h2>Najczęstsze pytania</h2>
+      </header>
+      <details>
+        <summary>Czy potrzebuję GOG Galaxy, klienta Epic albo aplikacji Amazon Games?</summary>
+        <p>Nie. GOR Launcher korzysta z API GOG oraz narzędzi <code>nile</code> (Amazon) i <code>legendary</code> (Epic), które instaluje samodzielnie. Klienty sklepów nie są potrzebne.</p>
+      </details>
+      <details>
+        <summary>Gdzie trafiają pobrane instalatory?</summary>
+        <p>Do folderu domyślnego z Ustawień albo do folderu wybranego dla konkretnej gry (zakładka Instalatory → Zmień folder). Każdy wiersz w Pobieraniach pokazuje pełną ścieżkę.</p>
+      </details>
+      <details>
+        <summary>Czy aktualizacja skasuje moją bibliotekę?</summary>
+        <p>Nie. Dane trzymamy w <code>%APPDATA%\goglite</code>, a identyfikator aplikacji się nie zmienił — biblioteka, ustawienia i historia pobrań zostają.</p>
+      </details>
+      <details>
+        <summary>Czy aplikacja działa bez internetu?</summary>
+        <p>Interfejs, fonty i ikony są lokalne, więc aplikacja uruchomi się offline, pokaże zapisaną bibliotekę i zainstalowane gry. Pobieranie i logowanie wymagają połączenia.</p>
+      </details>
     </section>
   </main>
 
   <footer class="foot">
-    <span>GOR Launcher · open source na licencji repozytorium</span>
-    <a href="https://github.com/multicolor-rgb/goglite">github.com/multicolor-rgb/goglite</a>
+    <div class="foot-brand">
+      <span class="brand-mark small">G</span>
+      <span>GOR Launcher · <span class="muted">v0.1.0</span></span>
+    </div>
+    <nav>
+      <a href="https://github.com/multicolor-rgb/GORLauncher">Repozytorium</a>
+      <a href="https://github.com/multicolor-rgb/GORLauncher/releases">Wydania</a>
+      <a href="https://github.com/multicolor-rgb/GORLauncher/issues">Zgłoś problem</a>
+    </nav>
   </footer>
 </body>
 </html>
