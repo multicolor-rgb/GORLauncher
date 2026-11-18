@@ -267,7 +267,10 @@ body {
 .btn:disabled { opacity: .45; cursor: default; transform: none; }
 .btn-primary { background: var(--solid-bg); border-color: var(--solid-bg); color: var(--solid-ink); }
 .btn-primary:hover { background: var(--solid-bg-hover); border-color: var(--solid-bg-hover); color: var(--solid-ink); }
-.btn-small { padding: 6px 10px; font-size: .58rem; letter-spacing: .1em; }
+.btn-small { padding: 4px 8px; font-size: .55rem; letter-spacing: .09em; }
+/* Mniejszy przycisk z samą ikoną (folder, pobierz, uruchom, pauza). */
+.btn-icon { width: 24px; height: 24px; padding: 0; display: inline-grid; place-items: center; }
+.btn-icon .ico, .btn-icon .ico svg { width: 13px; height: 13px; display: block; }
 .btn-large { width: 100%; padding: 12px 18px; margin-top: 22px; }
 
 .badge {
@@ -891,6 +894,28 @@ dialog#game-modal:not([open]) { display: none; }
 /* ---------- stan plików gry (kafelek + instalatory) ---------- */
 .game-card-foot { display: flex; align-items: center; gap: 8px; padding: 11px 12px 12px; }
 .game-card-foot .game-card-title { flex: 1; min-width: 0; padding: 0; }
+/* Waga instalacji na kafelku gry. */
+.game-card-size {
+  font-family: var(--mono);
+  font-size: .5rem;
+  letter-spacing: .04em;
+  color: var(--faint);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Znacznik sklepu na kafelku wspólnej Biblioteki (GOG / Prime / Epic). */
+.game-card-store {
+  font-family: var(--mono);
+  font-size: .5rem;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border: var(--line-w) solid var(--line);
+  padding: 2px 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .game-state, .inst-state {
   font-family: var(--mono);
   font-size: .5rem;

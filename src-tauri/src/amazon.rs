@@ -56,6 +56,10 @@ pub struct AmazonGame {
     pub installed: bool,
     /// Czy wybrany folder nadal istnieje (gra mogła zostać usunięta z dysku).
     pub dir_exists: bool,
+    /// Waga instalacji w bajtach (0 = nieznana).
+    pub size_bytes: u64,
+    /// Kiedy gra trafiła do biblioteki (ms od epoch).
+    pub added_at: i64,
 }
 
 /// Dane logowania wypisane przez `nile auth --login --non-interactive`.
@@ -82,7 +86,7 @@ fn nile_command(bin: &Path) -> Command {
 }
 
 /// Szuka `nile` w zmiennej `GOGLITE_NILE`, typowych miejscach instalacji i w PATH.
-fn find_nile() -> Option<PathBuf> {
+pub(crate) fn find_nile() -> Option<PathBuf> {
     if let Ok(custom) = std::env::var("GOGLITE_NILE") {
         let path = PathBuf::from(custom);
         if path.is_file() {
@@ -116,7 +120,7 @@ fn find_nile() -> Option<PathBuf> {
 
 /// Instaluje `nile` przez winget — bez terminala i bez uprawnień administratora.
 /// Postęp (linie winget) leci zdarzeniem `amazon:nile-progress`, żeby okno nie wyglądało na zawieszone.
-fn install_nile_via_winget(app: &AppHandle) -> Result<(), String> {
+pub(crate) fn install_nile_via_winget(app: &AppHandle) -> Result<(), String> {
     if find_nile().is_some() {
         return Ok(());
     }
@@ -413,8 +417,8 @@ fn parse_library(raw: &str, db: &Database) -> Result<Vec<AmazonGame>, String> {
     let Some(items) = value.as_array() else {
         return Ok(Vec::new());
     };
-    let states = db.amazon_states().map_err(|e| e.to_string())?;
     let mut games = Vec::new();
+    // Najpierw same dane z API — stan lokalny (folder, instalacja, data dopisania) dochodzi później.
     for item in items {
         let product = &item["product"];
         let Some(id) = product["id"].as_str().filter(|s| !s.trim().is_empty()) else {
@@ -434,20 +438,42 @@ fn parse_library(raw: &str, db: &Database) -> Result<Vec<AmazonGame>, String> {
             .or_else(|| detail["iconUrl"].as_str())
             .filter(|s| s.starts_with("http"))
             .map(|s| s.to_string());
-        let (install_dir, installed) = states.get(id).cloned().unwrap_or((None, false));
-        let dir_exists = install_dir
-            .as_deref()
-            .map(|d| Path::new(d).is_dir())
-            .unwrap_or(false);
         games.push(AmazonGame {
             id: id.to_string(),
             title: title.to_string(),
             genre,
             cover_url,
-            install_dir,
-            installed: installed && dir_exists,
-            dir_exists,
+            install_dir: None,
+            installed: false,
+            dir_exists: false,
+            size_bytes: 0,
+            added_at: 0,
         });
+    }
+    // Zapisanie „widzianych” gier ustala datę dopisania do biblioteki (przy pierwszym razie).
+    let ids: Vec<String> = games.iter().map(|g| g.id.clone()).collect();
+    if let Err(e) = db.touch_amazon_games(&ids) {
+        log::warn!("Nie udało się zapisać daty dodania gier Amazon: {e}");
+    }
+    let states = db.amazon_states().map_err(|e| e.to_string())?;
+    for game in games.iter_mut() {
+        let (install_dir, installed, added_at, size_bytes) =
+            states.get(&game.id).cloned().unwrap_or((None, false, 0, 0));
+        game.dir_exists = install_dir
+            .as_deref()
+            .map(|d| Path::new(d).is_dir())
+            .unwrap_or(false);
+        game.installed = installed && game.dir_exists;
+        game.install_dir = install_dir;
+        game.added_at = added_at;
+        game.size_bytes = size_bytes;
+        // Gry zainstalowane wcześniej nie mają zapisanej wagi — liczymy ją raz i zapamiętujemy.
+        if game.installed && game.size_bytes == 0 {
+            if let Some(dir) = game.install_dir.as_deref() {
+                game.size_bytes = cli::dir_size(Path::new(dir));
+                let _ = db.set_amazon_size_bytes(&game.id, game.size_bytes);
+            }
+        }
     }
     games.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
     Ok(games)
@@ -560,9 +586,14 @@ pub fn amazon_install(
                 let percent = cli::parse_percent(&line);
                 let Some(text) = cli::progress_text(&line, percent) else { continue };
                 last_line = text.clone();
+                // Rozmiar instalacji z linii postępu (`pobrane/całość` w bajtach).
+                let bytes = cli::parse_progress_bytes(&line);
                 let _ = app.emit(
                     "amazon:progress",
-                    serde_json::json!({ "gameId": game_id, "line": text, "percent": percent }),
+                    serde_json::json!({
+                        "gameId": game_id, "line": text, "percent": percent,
+                        "downloadedBytes": bytes.map(|b| b.0), "totalBytes": bytes.map(|b| b.1),
+                    }),
                 );
             }
         }
@@ -570,6 +601,8 @@ pub fn amazon_install(
         let ok = matches!(child.wait(), Ok(status) if status.success());
         if ok {
             let _ = db.set_amazon_installed(&game_id, true);
+            // Waga instalacji = realne zajęte miejsce w folderze gry.
+            let _ = db.set_amazon_size_bytes(&game_id, cli::dir_size(Path::new(&dir)));
         }
         let error = if ok { String::new() } else { last_line };
         emit_done(&app, &game_id, ok, &error);
@@ -586,7 +619,7 @@ pub fn amazon_launch(state: State<'_, AppState>, game_id: String) -> Result<(), 
         .amazon_states()
         .map_err(|e| e.to_string())?
         .get(&game_id)
-        .map(|(_, installed)| *installed)
+        .map(|(_, installed, _, _)| *installed)
         .unwrap_or(false);
     if !installed {
         return Err("Gra nie jest zainstalowana.".to_string());

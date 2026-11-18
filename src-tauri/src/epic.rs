@@ -66,6 +66,10 @@ pub struct EpicGame {
     pub installed: bool,
     /// Czy folder instalacji nadal istnieje (gra mogła zostać usunięta z dysku).
     pub dir_exists: bool,
+    /// Waga instalacji w bajtach (0 = nieznana).
+    pub size_bytes: u64,
+    /// Kiedy gra trafiła do biblioteki (ms od epoch).
+    pub added_at: i64,
 }
 
 // —————————— URUCHAMIANIE LEGENDARY ——————————
@@ -80,7 +84,7 @@ fn legendary_exe() -> &'static str {
 }
 
 /// Szuka `legendary` w `GOGLITE_LEGENDARY`, instalacji winget i w PATH.
-fn find_legendary() -> Option<PathBuf> {
+pub(crate) fn find_legendary() -> Option<PathBuf> {
     cli::find_tool("GOGLITE_LEGENDARY", legendary_exe(), "derrod.legendary")
 }
 
@@ -116,14 +120,24 @@ struct EpicAccount {
     account: Option<String>,
 }
 
+/// Czy tekst z pola `account` oznacza prawdziwe konto.
+///
+/// Przy braku logowania `legendary status --json` kończy się kodem 0 i zwraca
+/// `"account": "<not logged in>"`. Sam niepusty tekst nie wystarcza — inaczej UI
+/// pokazywałoby ten napis jako nazwę użytkownika i ukrywało przycisk logowania.
+fn is_logged_in_account(name: &str) -> bool {
+    let name = name.trim();
+    !name.is_empty() && !name.starts_with('<') && !name.eq_ignore_ascii_case("not logged in")
+}
+
 /// Odczytuje stan logowania z `legendary status --json`.
 fn auth_status() -> (bool, Option<String>) {
     let Ok(raw) = run_legendary(&["status", "--json"], EPIC_READ_TIMEOUT) else {
         return (false, None);
     };
     match cli::extract_json::<EpicAccount>(&raw) {
-        Some(st) => match st.account {
-            Some(name) if !name.trim().is_empty() => (true, Some(name)),
+        Some(st) => match st.account.as_deref().map(str::trim) {
+            Some(name) if is_logged_in_account(name) => (true, Some(name.to_string())),
             _ => (false, None),
         },
         None => (false, None),
@@ -235,10 +249,12 @@ pub async fn epic_login_complete(code: String) -> Result<EpicStatus, String> {
 }
 
 /// Wylogowanie konta Epic (`legendary auth --delete`).
+/// Zwraca stan po wylogowaniu, żeby UI od razu przestało pokazywać konto.
 #[tauri::command]
-pub async fn epic_logout() -> Result<(), String> {
+pub async fn epic_logout() -> Result<EpicStatus, String> {
     tauri::async_runtime::spawn_blocking(|| {
-        run_legendary(&["auth", "--delete"], EPIC_READ_TIMEOUT).map(|_| ())
+        run_legendary(&["auth", "--delete"], EPIC_READ_TIMEOUT)?;
+        Ok(status_snapshot())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -247,7 +263,7 @@ pub async fn epic_logout() -> Result<(), String> {
 // —————————— INSTALACJA LEGENDARY (winget) ——————————
 
 /// Instaluje `legendary` przez winget — bez terminala i bez uprawnień administratora.
-fn install_legendary_via_winget(app: &AppHandle) -> Result<(), String> {
+pub(crate) fn install_legendary_via_winget(app: &AppHandle) -> Result<(), String> {
     if find_legendary().is_some() {
         return Ok(());
     }
@@ -369,7 +385,6 @@ fn parse_library(raw: &str, installed_raw: &str, db: &Database) -> Result<Vec<Ep
     let items = cli::extract_json::<Vec<serde_json::Value>>(raw)
         .ok_or_else(|| "Nie udało się odczytać biblioteki legendary.".to_string())?;
     let installed = parse_installed(installed_raw);
-    let states = db.epic_states().map_err(|e| e.to_string())?;
     let mut games = Vec::new();
     for item in items {
         let Some(id) = item["app_name"].as_str().filter(|s| !s.trim().is_empty()) else {
@@ -400,7 +415,6 @@ fn parse_library(raw: &str, installed_raw: &str, db: &Database) -> Result<Vec<Ep
             .as_deref()
             .map(|d| Path::new(d).is_dir())
             .unwrap_or(false);
-        let chosen_dir = states.get(id).and_then(|(dir, _)| dir.clone());
         games.push(EpicGame {
             id: id.to_string(),
             title: title.to_string(),
@@ -408,9 +422,32 @@ fn parse_library(raw: &str, installed_raw: &str, db: &Database) -> Result<Vec<Ep
             cover_url: cover_url(metadata),
             installed: install_dir.is_some() && dir_exists,
             install_dir,
-            chosen_dir,
+            chosen_dir: None,
             dir_exists,
+            size_bytes: 0,
+            added_at: 0,
         });
+    }
+    // Data dopisania do biblioteki — pierwsze zobaczenie gry w `legendary list`.
+    let ids: Vec<String> = games.iter().map(|g| g.id.clone()).collect();
+    if let Err(e) = db.touch_epic_games(&ids) {
+        log::warn!("Nie udało się zapisać daty dodania gier Epic: {e}");
+    }
+    let states = db.epic_states().map_err(|e| e.to_string())?;
+    for game in games.iter_mut() {
+        let (chosen_dir, _, added_at, size_bytes) =
+            states.get(&game.id).cloned().unwrap_or((None, false, 0, 0));
+        game.chosen_dir = chosen_dir;
+        game.added_at = added_at;
+        // Po instalacji znamy realne zajęte miejsce; wcześniej pokazujemy rozmiar zapisany.
+        game.size_bytes = size_bytes;
+        if game.installed && game.size_bytes == 0 {
+            if let Some(dir) = game.install_dir.as_deref() {
+                game.size_bytes = cli::dir_size(Path::new(dir));
+                // Zapamiętujemy wynik, żeby kolejne wczytania biblioteki były natychmiastowe.
+                let _ = db.set_epic_size_bytes(&game.id, game.size_bytes);
+            }
+        }
     }
     games.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
     Ok(games)
@@ -512,6 +549,9 @@ pub fn epic_install(
                 dir.as_str(),
                 "-y",
                 "--skip-sdl",
+                // `--yes` potwierdza też pytanie o dodatki — bez tej flagi legendary
+                // dociągnąłby wszystkie DLC. Pobieramy samą grę.
+                "--skip-dlcs",
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -530,26 +570,38 @@ pub fn epic_install(
             }
         };
 
-        // legendary loguje na stdout — to stamtąd bierzemy postęp.
-        // stderr musi być czytane, żeby pełny bufor nie zablokował procesu.
-        if let Some(stderr) = child.stderr.take() {
+        // legendary loguje przez `logging`, czyli na stderr — dopiero tam jest postęp
+        // (`[DLManager] INFO: = Progress: …`) i komunikaty błędów.
+        // stdout czytamy w osobnym wątku, żeby pełny bufor rury nie zablokował procesu.
+        if let Some(stdout) = child.stdout.take() {
             std::thread::spawn(move || {
-                for _ in BufReader::new(stderr).lines() {}
+                for _ in BufReader::new(stdout).lines() {}
             });
         }
 
         let mut last_line = String::new();
-        if let Some(stdout) = child.stdout.take() {
-            for line in BufReader::new(stdout).lines() {
+        let mut last_info = String::new();
+        if let Some(stderr) = child.stderr.take() {
+            for line in BufReader::new(stderr).lines() {
                 let Ok(line) = line else { break };
                 let percent = cli::parse_percent(&line);
                 let Some(text) = cli::progress_text(&line, percent) else {
                     continue;
                 };
-                last_line = text.clone();
+                // Linia bez procentu (np. `[cli] ERROR: …`) lepiej opisuje nieudane pobranie.
+                if percent.is_none() {
+                    last_info = text.clone();
+                } else {
+                    last_line = text.clone();
+                }
+                // Rozmiar instalacji z linii postępu (legendary podaje MiB, cli przelicza na bajty).
+                let bytes = cli::parse_progress_bytes(&line);
                 let _ = app.emit(
                     "epic:progress",
-                    serde_json::json!({ "gameId": game_id, "line": text, "percent": percent }),
+                    serde_json::json!({
+                        "gameId": game_id, "line": text, "percent": percent,
+                        "downloadedBytes": bytes.map(|b| b.0), "totalBytes": bytes.map(|b| b.1),
+                    }),
                 );
             }
         }
@@ -557,8 +609,20 @@ pub fn epic_install(
         let ok = matches!(child.wait(), Ok(status) if status.success());
         if ok {
             let _ = db.set_epic_installed(&game_id, true);
+            // Waga instalacji: folder gry z `legendary list-installed`.
+            if let Ok(raw) = run_legendary(&["list-installed", "--json"], EPIC_READ_TIMEOUT) {
+                if let Some(dir) = parse_installed(&raw).get(&game_id).cloned().flatten() {
+                    let _ = db.set_epic_size_bytes(&game_id, cli::dir_size(Path::new(&dir)));
+                }
+            }
         }
-        let error = if ok { String::new() } else { last_line };
+        let error = if ok {
+            String::new()
+        } else if !last_info.is_empty() {
+            last_info
+        } else {
+            last_line
+        };
         emit_done(&app, &game_id, ok, &error);
     });
     Ok(())
@@ -573,7 +637,7 @@ pub fn epic_launch(state: State<'_, AppState>, game_id: String) -> Result<(), St
         .epic_states()
         .map_err(|e| e.to_string())?
         .get(&game_id)
-        .map(|(_, installed)| *installed)
+        .map(|(_, installed, _, _)| *installed)
         .unwrap_or(false);
     if !installed {
         return Err("Gra nie jest zainstalowana.".to_string());
@@ -626,6 +690,15 @@ mod tests {
         assert!(games[1].install_dir.is_some());
         assert!(!games[1].installed);
         assert!(!games[1].dir_exists);
+    }
+
+    #[test]
+    fn rozpoznaje_brak_logowania_legendary() {
+        // legendary przy braku logowania zwraca dokładnie taki tekst.
+        assert!(!is_logged_in_account("<not logged in>"));
+        assert!(!is_logged_in_account("   "));
+        assert!(!is_logged_in_account("Not logged in"));
+        assert!(is_logged_in_account("gracz123"));
     }
 
     #[test]

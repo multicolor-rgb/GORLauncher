@@ -136,6 +136,27 @@ pub fn run_with_timeout(
     })
 }
 
+/// Sumuje rozmiary plików w katalogu (rekurencyjnie) — waga instalacji gry.
+pub fn dir_size(path: &Path) -> u64 {
+    let mut total = 0u64;
+    let mut stack = vec![(path.to_path_buf(), 0usize)];
+    while let Some((dir, depth)) = stack.pop() {
+        if depth > 8 {
+            continue;
+        }
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else { continue };
+            if kind.is_dir() {
+                stack.push((entry.path(), depth + 1));
+            } else if kind.is_file() {
+                total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+        }
+    }
+    total
+}
+
 // —————————— WINGET ——————————
 
 /// Ścieżka do `winget` — alias z `WindowsApps` bywa nieosiągalny z PATH aplikacji GUI.
@@ -268,6 +289,27 @@ pub fn parse_percent(line: &str) -> Option<f32> {
     number.parse::<f32>().ok()
 }
 
+/// Wyciąga z linii postępu rozmiar w bajtach: `(pobrane, całość)`.
+/// nile podaje bajty (`4.62 21542473/424961033`), legendary — MiB
+/// (`12.50% (250/2000)`), dlatego obecność `%` decyduje o przeliczeniu.
+pub fn parse_progress_bytes(line: &str) -> Option<(u64, u64)> {
+    let rest = line.split("= Progress:").nth(1)?;
+    let mut tokens = rest.split_whitespace();
+    let first = tokens.next()?;
+    // legendary: najpierw procent, potem rozmiar w nawiasie; nile: od razu `pobrane/całość`.
+    let (pair, in_mib) = if first.contains('/') {
+        (first, false)
+    } else {
+        (tokens.next()?, first.ends_with('%'))
+    };
+    let pair = pair.trim_start_matches('(').trim_end_matches(|c| c == ')' || c == ',');
+    let (done, total) = pair.split_once('/')?;
+    let done: u64 = done.parse().ok()?;
+    let total: u64 = total.parse().ok()?;
+    let scale: u64 = if in_mib { 1024 * 1024 } else { 1 };
+    Some((done.saturating_mul(scale), total.saturating_mul(scale)))
+}
+
 /// Zdejmuje prefiks loggera: `INFO [PROGRESS]:\t` (nile) i `[DLManager] INFO:` (legendary).
 fn strip_log_prefix(line: &str) -> &str {
     const LEVELS: [&str; 6] = ["INFO", "WARNING", "ERROR", "DEBUG", "FATAL", "CRITICAL"];
@@ -389,6 +431,22 @@ mod tests {
         // Rzeczywisty format legendary (ze znakiem `%` i liczbami w nawiasie).
         let legendary = "[DLManager] INFO: = Progress: 12.50% (250/2000), Running for 00:02:11, ETA: 00:04:12";
         assert_eq!(parse_percent(legendary), Some(12.5));
+    }
+
+    #[test]
+    fn wyciaga_rozmiar_pobierania_z_linii_logu() {
+        // nile: wartości są już w bajtach.
+        let nile = "INFO [PROGRESS]:\t = Progress: 4.62 21542473/424961033, Running for: 00:00:15, ETA: 00:05:12";
+        assert_eq!(parse_progress_bytes(nile), Some((21_542_473, 424_961_033)));
+        // legendary: wartości w MiB → przeliczamy na bajty.
+        let legendary =
+            "[DLManager] INFO: = Progress: 12.50% (250/2000), Running for 00:02:11, ETA: 00:04:12";
+        assert_eq!(
+            parse_progress_bytes(legendary),
+            Some((250 * 1024 * 1024, 2000 * 1024 * 1024))
+        );
+        // Inne komunikaty nie mogą udawać rozmiaru.
+        assert_eq!(parse_progress_bytes("[Core] INFO: Logging in..."), None);
     }
 
     #[test]

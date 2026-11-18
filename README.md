@@ -14,11 +14,16 @@ i kolejka pobrań są puste.*
 ## Funkcje
 
 - **Logowanie przez GOG** w osobnym oknie (OAuth 2.0, Authorization Code) z odświeżaniem tokenu.
-- **Biblioteka gier** z okładkami, gatunkiem, datą premiery i platformami.
+- **Biblioteka gier** z okładkami, gatunkiem, datą premiery i platformami — wszystkie gry
+  (GOG, Prime Gaming, Epic Games) w jednym miejscu, z filtrem sklepu i platformy.
+- **Osobny widok GOG** (obok Prime Gaming i Epic Games): konta, biblioteka, instalatory,
+  bezpośrednia instalacja i uruchamianie.
 - **Wyszukiwarka** i **filtr platformy** (Wszystkie / Windows / Linux / macOS).
 - **Szczegóły gry**: opis, producent, wydawca, gatunki, zrzuty ekranu (podgląd w powiększeniu).
 - **Instalatory** per gra, filtrowane po systemie; kolejka pobrań z postępem, wstrzymywaniem
   i anulowaniem.
+- **Instalacja i granie wprost z aplikacji** — pobrany instalator GOG można uruchomić cicho
+  (bez kreatora), a gotową grę uruchomić przyciskiem **Uruchom** z poziomu goglite.
 - **Dwa motywy** (ciemny/jasny) i **dwa języki** (polski/angielski) — zmiana natychmiastowa,
   zapisywana w ustawieniach.
 - **Osobny folder dla każdej gry** — wybierany przy pierwszym pobraniu; aplikacja sprawdza,
@@ -29,6 +34,8 @@ i kolejka pobrań są puste.*
 - **Epic Games** — logowanie kontem Epic, biblioteka gier z Epic Games Store (z okładkami),
   pobieranie do wybranego folderu i uruchamianie; obsługa przez narzędzie
   [`legendary`](https://github.com/legendary-gl/legendary).
+- **Waga instalacji** — wiersze pobrań Prime Gaming i Epic pokazują rozmiar pobranego i całości
+  (np. `3,2 GiB / 24,0 GiB`), tak jak pobrania GOG.
 
 ## Zrzuty ekranu
 
@@ -151,6 +158,8 @@ goglite/
 | `get_download_dir`, `pick_download_dir` | Odczyt i wybór folderu zapisu |
 | `pick_game_dir` | Wybór folderu pobierania dla konkretnej gry |
 | `open_folder` | Otwiera folder (lub folder pliku) w systemowym menedżerze plików |
+| `gog_install` | Cicha instalacja gry z pobranego instalatora GOG (zwraca ścieżkę exe) |
+| `gog_launch` | Uruchamia grę GOG zainstalowaną z aplikacji |
 | `amazon_status` | Czy `nile` jest dostępny i czy konto Amazon jest zalogowane |
 | `amazon_login`, `amazon_login_complete`, `amazon_logout` | Logowanie (start + dokończenie adresem przekierowania) i wylogowanie konta Amazon |
 | `amazon_library`, `amazon_sync` | Biblioteka Amazon Games (z cache / wymuszona synchronizacja) |

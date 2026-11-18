@@ -22,24 +22,29 @@
           <span class="nav-label" data-i18n="nav.library">Biblioteka</span>
           <span class="nav-mark" aria-hidden="true"></span>
         </button>
-        <button id="nav-amazon" class="nav-item">
+        <button id="nav-gog" class="nav-item">
           <span class="nav-idx">02</span>
+          <span class="nav-label" data-i18n="nav.gog">GOG</span>
+          <span class="nav-mark" aria-hidden="true"></span>
+        </button>
+        <button id="nav-amazon" class="nav-item">
+          <span class="nav-idx">03</span>
           <span class="nav-label" data-i18n="nav.amazon">Prime Gaming</span>
           <span class="nav-mark" aria-hidden="true"></span>
         </button>
         <button id="nav-epic" class="nav-item">
-          <span class="nav-idx">03</span>
+          <span class="nav-idx">04</span>
           <span class="nav-label" data-i18n="nav.epic">Epic Games</span>
           <span class="nav-mark" aria-hidden="true"></span>
         </button>
         <button id="nav-downloads" class="nav-item">
-          <span class="nav-idx">04</span>
+          <span class="nav-idx">05</span>
           <span class="nav-label" data-i18n="nav.downloads">Pobierania</span>
           <span id="dl-badge" class="badge hidden">0</span>
           <span class="nav-mark" aria-hidden="true"></span>
         </button>
         <button id="nav-settings" class="nav-item">
-          <span class="nav-idx">05</span>
+          <span class="nav-idx">06</span>
           <span class="nav-label" data-i18n="nav.settings">Ustawienia</span>
           <span class="nav-mark" aria-hidden="true"></span>
         </button>
@@ -74,8 +79,8 @@
         <section id="view-games" class="view active">
           <header class="view-head">
             <p class="eyebrow"><span class="eyebrow-num">01</span><span class="eyebrow-sep">/</span><span data-i18n="hud.library">Biblioteka</span></p>
-            <h2 class="view-title" data-i18n="library.title">Moja biblioteka.</h2>
-            <p class="view-sub" data-i18n="library.sub">Instalatory offline z GOG.com. Wybierz grę, aby zobaczyć pliki.</p>
+            <h2 class="view-title" data-i18n="library.title">Wszystkie gry.</h2>
+            <p class="view-sub" data-i18n="library.sub">Gry z GOG, Prime Gaming i Epic Games w jednym miejscu — z wyszukiwarką i filtrami.</p>
           </header>
 
           <div id="welcome" class="welcome">
@@ -100,6 +105,12 @@
               <p class="eyebrow"><span class="eyebrow-num">02</span><span class="eyebrow-sep">/</span><span data-i18n="hud.catalog">Katalog</span></p>
               <span class="count"><span id="game-count"></span> <span data-i18n="library.countLabel">pozycji</span></span>
             </div>
+            <div class="platform-filter" id="store-filter">
+              <button class="chip active" data-store-filter="all" data-i18n="filter.all">Wszystkie</button>
+              <button class="chip" data-store-filter="gog" data-i18n="nav.gog">GOG</button>
+              <button class="chip" data-store-filter="prime" data-i18n="nav.amazon">Prime Gaming</button>
+              <button class="chip" data-store-filter="epic" data-i18n="nav.epic">Epic Games</button>
+            </div>
             <div class="platform-filter" id="platform-filter">
               <button class="chip active" data-platform="all" data-i18n="filter.all">Wszystkie</button>
               <button class="chip" data-platform="windows" data-i18n="filter.windows">Windows</button>
@@ -111,9 +122,32 @@
           <div id="game-empty" class="empty-state hidden"></div>
         </section>
 
+        <section id="view-gog" class="view">
+          <header class="view-head">
+            <p class="eyebrow"><span class="eyebrow-num">02</span><span class="eyebrow-sep">/</span><span data-i18n="hud.gog">GOG</span></p>
+            <div class="view-head-row">
+              <h2 class="view-title" data-i18n="gog.title">GOG</h2>
+              <div class="dl-toolbar">
+                <span id="gog-user" class="badge hidden"></span>
+                <button id="btn-gog-login" class="btn btn-small btn-primary hidden" data-i18n="welcome.login">Zaloguj przez GOG</button>
+                <button id="btn-gog-logout" class="btn btn-small hidden" data-i18n="action.logout">Wyloguj</button>
+              </div>
+            </div>
+            <p class="view-sub" data-i18n="gog.sub">Biblioteka GOG — instalatory offline, instalacja i uruchamianie wprost z aplikacji.</p>
+          </header>
+          <div class="platform-filter" id="gog-platform-filter">
+            <button class="chip active" data-platform="all" data-i18n="filter.all">Wszystkie</button>
+            <button class="chip" data-platform="windows" data-i18n="filter.windows">Windows</button>
+            <button class="chip" data-platform="linux" data-i18n="filter.linux">Linux</button>
+            <button class="chip" data-platform="macos" data-i18n="filter.macos">macOS</button>
+          </div>
+          <div id="gog-empty" class="empty-state hidden"></div>
+          <div id="gog-grid" class="game-grid hidden"></div>
+        </section>
+
         <section id="view-amazon" class="view">
           <header class="view-head">
-            <p class="eyebrow"><span class="eyebrow-num">02</span><span class="eyebrow-sep">/</span><span data-i18n="hud.amazon">Amazon Games</span></p>
+            <p class="eyebrow"><span class="eyebrow-num">03</span><span class="eyebrow-sep">/</span><span data-i18n="hud.amazon">Amazon Games</span></p>
             <h2 class="view-title" data-i18n="amazon.title">Prime Gaming</h2>
             <p class="view-sub" data-i18n="amazon.sub">Gry z klienta Amazon Games. Zaloguj się kontem Amazon, aby je zobaczyć, pobrać i uruchomić.</p>
           </header>
@@ -157,7 +191,7 @@
 
         <section id="view-epic" class="view">
           <header class="view-head">
-            <p class="eyebrow"><span class="eyebrow-num">03</span><span class="eyebrow-sep">/</span><span data-i18n="hud.epic">Epic Games</span></p>
+            <p class="eyebrow"><span class="eyebrow-num">04</span><span class="eyebrow-sep">/</span><span data-i18n="hud.epic">Epic Games</span></p>
             <h2 class="view-title" data-i18n="epic.title">Epic Games</h2>
             <p class="view-sub" data-i18n="epic.sub">Gry z biblioteki Epic. Zaloguj się kontem Epic, aby je zobaczyć, pobrać i uruchomić.</p>
           </header>
@@ -201,7 +235,7 @@
 
         <section id="view-downloads" class="view">
           <header class="view-head">
-            <p class="eyebrow"><span class="eyebrow-num">04</span><span class="eyebrow-sep">/</span><span data-i18n="hud.downloads">Pobierania</span></p>
+            <p class="eyebrow"><span class="eyebrow-num">05</span><span class="eyebrow-sep">/</span><span data-i18n="hud.downloads">Pobierania</span></p>
             <div class="view-head-row">
               <h2 class="view-title" data-i18n="downloads.title">Pobierania</h2>
               <div class="dl-toolbar">
@@ -217,7 +251,7 @@
 
         <section id="view-settings" class="view">
           <header class="view-head">
-            <p class="eyebrow"><span class="eyebrow-num">05</span><span class="eyebrow-sep">/</span><span data-i18n="hud.settings">Konfiguracja</span></p>
+            <p class="eyebrow"><span class="eyebrow-num">06</span><span class="eyebrow-sep">/</span><span data-i18n="hud.settings">Konfiguracja</span></p>
             <h2 class="view-title" data-i18n="settings.title">Ustawienia</h2>
             <p class="view-sub" data-i18n="settings.sub">Język, wygląd i miejsce zapisu instalatorów.</p>
           </header>

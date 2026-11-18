@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS games (
     publishers     TEXT,                  -- wydawcy (JSON array, uzupełniane z v2 API)
     platforms      TEXT,                  -- platformy: JSON array ["windows","linux","macos"]
     install_dir    TEXT,                  -- własny folder pobierania wybrany dla tej gry
+    launch_exe     TEXT,                  -- plik exe zainstalowanej gry (uruchamianie z aplikacji)
     last_synced_at INTEGER NOT NULL DEFAULT 0  -- timestamp (ms od epoch)
 );
 

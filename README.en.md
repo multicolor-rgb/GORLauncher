@@ -14,11 +14,16 @@ download queue are empty.*
 ## Features
 
 - **GOG sign-in** in a separate window (OAuth 2.0 authorization code flow) with token refresh.
-- **Game library** with covers, genre, release date and supported platforms.
+- **Game library** with covers, genre, release date and supported platforms — every game
+  (GOG, Prime Gaming, Epic Games) in one place, with store and platform filters.
+- **A dedicated GOG view** (next to Prime Gaming and Epic Games): account, library, installers,
+  direct install and launching.
 - **Search** and a **platform filter** (All / Windows / Linux / macOS).
 - **Game details**: description, developers, publishers, genres, screenshots with a zoom viewer.
 - **Installers** per game, filtered by operating system; download queue with progress, pause
   and cancel.
+- **Install and play right from the app** — a downloaded GOG installer can run silently
+  (no wizard), and the installed game can be launched with the **Launch** button.
 - **Two themes** (dark/light) and **two languages** (Polish/English) — applied instantly and
   stored in settings.
 - **A separate folder per game** — chosen on the first download; the app checks whether the
@@ -29,6 +34,8 @@ download queue are empty.*
 - **Epic Games** — Epic sign-in, the library from the Epic Games Store (with cover art),
   downloads into a folder of your choice and launching; powered by
   [`legendary`](https://github.com/legendary-gl/legendary).
+- **Install size** — Prime Gaming and Epic download rows show the downloaded and total size
+  (e.g. `3.2 GiB / 24.0 GiB`), just like GOG downloads.
 
 ## Screenshots
 
@@ -151,6 +158,8 @@ goglite/
 | `get_download_dir`, `pick_download_dir` | Read and choose the download folder |
 | `pick_game_dir` | Choose the download folder for a single game |
 | `open_folder` | Open a folder (or the folder containing a file) in the system file manager |
+| `gog_install` | Silent install from a downloaded GOG installer (returns the exe path) |
+| `gog_launch` | Launches a GOG game installed from the app |
 | `amazon_status` | Whether `nile` is available and the Amazon account is signed in |
 | `amazon_login`, `amazon_login_complete`, `amazon_logout` | Amazon sign-in (start + finish with the redirect URL) and sign-out |
 | `amazon_library`, `amazon_sync` | Amazon Games library (cached / forced refresh) |

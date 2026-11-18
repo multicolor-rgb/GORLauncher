@@ -25,6 +25,17 @@ pub struct AppState {
     pub settings_path: PathBuf,
 }
 
+// —————————— START ——————————
+
+/// Pokazuje główne okno po pierwszym wczytaniu interfejsu.
+/// Okno startuje ukryte (`visible: false`), więc zamiast ciemnego prostokąta
+/// bez GUI użytkownik widzi od razu gotowy interfejs.
+#[tauri::command]
+pub fn app_ready(window: tauri::WebviewWindow) {
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
 // —————————— AUTH ——————————
 
 #[tauri::command]
@@ -201,8 +212,12 @@ pub async fn sync_library(app: AppHandle, state: State<'_, AppState>) -> Result<
         platforms: g.platforms,
         // Producenci/wydawcy są znani dopiero po zapytaniu do v2 API (przy otwarciu gry).
         developers: Vec::new(), publishers: Vec::new(),
-        // Folder gry jest ustawiany osobno i nie jest nadpisywany przez synchronizację.
+        // Folder gry i ścieżka exe są ustawiane osobno — synchronizacja ich nie nadpisuje.
         install_dir: None,
+        launch_exe: None,
+        // Waga i data dopisania są ustawiane lokalnie (po instalacji / pierwszym syncu).
+        size_bytes: 0,
+        added_at: 0,
     }).collect();
     let count = rows.len();
     state.db.upsert_games(&rows).map_err(|e| e.to_string())?;
@@ -226,7 +241,21 @@ pub fn get_games(state: State<'_, AppState>) -> Result<Vec<GameRow>, String> {
 pub async fn get_installers(app: AppHandle, state: State<'_, AppState>, game_id: i64) -> Result<Vec<Installer>, String> {
     let token = state.auth.token().map_err(|e| e.to_string())?;
     let client = GogClient::new(token.access_token, state.http.clone(), app);
-    client.installers(game_id).await.map_err(|e| e.to_string())
+    let installers = client.installers(game_id).await.map_err(|e| e.to_string())?;
+    // Waga instalacji: suma części najlepszego instalatora (najlepiej Windowsowego).
+    let best = installers
+        .iter()
+        .filter(|i| i.os.to_lowercase().starts_with("win"))
+        .max_by_key(|i| i.size)
+        .or_else(|| installers.iter().max_by_key(|i| i.size));
+    if let Some(installer) = best {
+        let parts: u64 = installer.files.iter().map(|f| f.size).sum();
+        let total = parts.max(installer.size);
+        if total > 0 {
+            let _ = state.db.set_game_size_bytes(game_id, total);
+        }
+    }
+    Ok(installers)
 }
 
 /// Pobiera metadane gry (opis, producenci, wydawcy, gatunki) z **publicznego**

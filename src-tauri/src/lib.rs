@@ -10,8 +10,10 @@ mod downloads;
 mod epic;
 mod error;
 mod gog;
+mod gog_install;
 mod platform;
 mod settings;
+mod tools;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -85,9 +87,20 @@ pub fn run() {
                 settings_path,
             };
             app.manage(state);
+
+            // Okno jest ukryte do pierwszego wczytania UI (frontend woła `app_ready`).
+            // Gdyby strona się nie wczytała (np. błąd JS), pokazujemy okno awaryjnie po 5 s.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_secs(5));
+                if let Some(win) = handle.get_webview_window("main") {
+                    let _ = win.show();
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::app_ready,
             commands::get_auth_status,
             commands::login_via_www,
             commands::logout,
@@ -103,6 +116,8 @@ pub fn run() {
             commands::pick_download_dir,
             commands::pick_game_dir,
             commands::open_folder,
+            gog_install::gog_install,
+            gog_install::gog_launch,
             amazon::amazon_status,
             amazon::amazon_login,
             amazon::amazon_login_complete,
@@ -123,6 +138,7 @@ pub fn run() {
             epic::pick_epic_dir,
             epic::epic_install,
             epic::epic_launch,
+            tools::ensure_store_tools,
             commands::get_settings,
             commands::set_language,
             commands::set_theme,

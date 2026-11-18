@@ -32,6 +32,12 @@ pub struct GameRow {
     pub platforms: Vec<String>,
     /// Własny folder pobierania wybrany dla tej gry (brak = domyślny folder aplikacji).
     pub install_dir: Option<String>,
+    /// Plik exe zainstalowanej gry GOG — pozwala uruchomić ją z aplikacji.
+    pub launch_exe: Option<String>,
+    /// Waga instalacji w bajtach (rozmiar instalatorów lub zajęte miejsce na dysku).
+    pub size_bytes: u64,
+    /// Kiedy gra pierwszy raz trafiła do biblioteki (ms od epoch) — do sortowania.
+    pub added_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -70,25 +76,51 @@ fn parse_names(raw: Option<String>) -> Vec<String> {
     raw.and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok()).unwrap_or_default()
 }
 
-/// Lekkie migracje: dodaje brakujące kolumny do istniejącej tabeli `games`
-/// (SQLite nie obsługuje `ADD COLUMN IF NOT EXISTS`).
-fn migrate(conn: &rusqlite::Connection) -> Result<()> {
+/// Dodaje brakujące kolumny do tabeli (SQLite nie obsługuje `ADD COLUMN IF NOT EXISTS`).
+fn add_columns(conn: &rusqlite::Connection, table: &str, cols: &[(&str, &str)]) -> Result<()> {
+    // Tabela starszych wersji może jeszcze nie istnieć — wtedy nie ma czego migrować.
+    let exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+            params![table],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|n| n > 0)
+        .unwrap_or(false);
+    if !exists {
+        return Ok(());
+    }
     let existing: std::collections::HashSet<String> = {
-        let mut stmt = conn.prepare("PRAGMA table_info(games)")?;
+        let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
         let rows = stmt.query_map([], |r| r.get::<_, String>(1))?;
         rows.filter_map(|r| r.ok()).collect()
     };
-    for (name, ty) in [
+    for (name, ty) in cols {
+        if !existing.contains(*name) {
+            conn.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {name} {ty}"))?;
+        }
+    }
+    Ok(())
+}
+
+/// Lekkie migracje istniejącej bazy (kolumny dodane po pierwszej wersji schematu).
+fn migrate(conn: &rusqlite::Connection) -> Result<()> {
+    add_columns(conn, "games", &[
         ("genre", "TEXT"),
         ("release_date", "TEXT"),
         ("developers", "TEXT"),
         ("publishers", "TEXT"),
         ("platforms", "TEXT"),
         ("install_dir", "TEXT"),
-    ] {
-        if !existing.contains(name) {
-            conn.execute_batch(&format!("ALTER TABLE games ADD COLUMN {name} {ty}"))?;
-        }
+        ("launch_exe", "TEXT"),
+        ("size_bytes", "INTEGER NOT NULL DEFAULT 0"),
+        ("added_at", "INTEGER NOT NULL DEFAULT 0"),
+    ])?;
+    for table in ["amazon_games", "epic_games"] {
+        add_columns(conn, table, &[
+            ("size_bytes", "INTEGER NOT NULL DEFAULT 0"),
+            ("added_at", "INTEGER NOT NULL DEFAULT 0"),
+        ])?;
     }
     Ok(())
 }
@@ -128,14 +160,16 @@ impl Database {
     pub fn upsert_games(&self, games: &[GameRow]) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare_cached(
-            "INSERT INTO games (id, title, slug, image_url, icon_url, genre, release_date, platforms, last_synced_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            "INSERT INTO games (id, title, slug, image_url, icon_url, genre, release_date, platforms, last_synced_at, added_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
              ON CONFLICT(id) DO UPDATE SET
                title = excluded.title, slug = excluded.slug,
                image_url = excluded.image_url, icon_url = excluded.icon_url,
                genre = excluded.genre, release_date = excluded.release_date,
                platforms = excluded.platforms,
-               last_synced_at = excluded.last_synced_at",
+               last_synced_at = excluded.last_synced_at,
+               -- Data dopisania do biblioteki zostaje przy pierwszym wstawieniu.
+               added_at = CASE WHEN games.added_at = 0 THEN excluded.added_at ELSE games.added_at END",
         )?;
         let now = now_ms();
         let mut n = 0usize;
@@ -153,7 +187,7 @@ impl Database {
     pub fn list_games(&self) -> Result<Vec<GameRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, slug, image_url, icon_url, genre, release_date, developers, publishers, platforms, install_dir
+            "SELECT id, title, slug, image_url, icon_url, genre, release_date, developers, publishers, platforms, install_dir, launch_exe, size_bytes, added_at
              FROM games ORDER BY title COLLATE NOCASE",
         )?;
         let rows = stmt.query_map([], |r| {
@@ -165,6 +199,9 @@ impl Database {
                 publishers: parse_names(r.get(8)?),
                 platforms: parse_names(r.get(9)?),
                 install_dir: r.get(10)?,
+                launch_exe: r.get(11)?,
+                size_bytes: r.get::<_, i64>(12)?.max(0) as u64,
+                added_at: r.get(13)?,
             })
         })?;
         let mut out = Vec::new();
@@ -195,6 +232,39 @@ impl Database {
             params![game_id, dir],
         )?;
         Ok(())
+    }
+
+    /// Zapisuje wagę instalacji gry w bajtach (0 = nieznana).
+    pub fn set_game_size_bytes(&self, game_id: i64, bytes: u64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE games SET size_bytes = ?2 WHERE id = ?1",
+            params![game_id, bytes as i64],
+        )?;
+        Ok(())
+    }
+
+    /// Zapisuje ścieżkę pliku exe zainstalowanej gry (`None` czyści wpis).
+    pub fn set_game_launch_exe(&self, game_id: i64, exe: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE games SET launch_exe = ?2 WHERE id = ?1",
+            params![game_id, exe],
+        )?;
+        Ok(())
+    }
+
+    /// Ścieżka exe zapisana dla gry (pusty wpis traktujemy jak brak).
+    pub fn get_game_launch_exe(&self, game_id: i64) -> Option<String> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT launch_exe FROM games WHERE id = ?1",
+            params![game_id],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .ok()
+        .flatten()
+        .filter(|p| !p.trim().is_empty())
     }
 
     /// Zwraca folder wybrany dla gry (pusty wpis traktujemy jak brak wyboru).
@@ -367,25 +437,56 @@ impl Database {
         }
     }
 
-    /// Wszystkie zapisane stany gier Amazon: `id -> (folder, zainstalowana)`.
+    /// Wszystkie zapisane stany gier Amazon:
+    /// `id -> (folder, zainstalowana, dodana_do_biblioteki, waga_instalacji)`.
     pub fn amazon_states(
         &self,
-    ) -> Result<std::collections::HashMap<String, (Option<String>, bool)>> {
+    ) -> Result<std::collections::HashMap<String, (Option<String>, bool, i64, u64)>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id, install_dir, installed FROM amazon_games")?;
+        let mut stmt = conn
+            .prepare("SELECT id, install_dir, installed, added_at, size_bytes FROM amazon_games")?;
         let rows = stmt.query_map([], |r| {
             Ok((
                 r.get::<_, String>(0)?,
                 r.get::<_, Option<String>>(1)?,
                 r.get::<_, i64>(2)? != 0,
+                r.get::<_, i64>(3)?,
+                r.get::<_, i64>(4)?.max(0) as u64,
             ))
         })?;
         let mut map = std::collections::HashMap::new();
         for row in rows {
-            let (id, dir, installed) = row?;
-            map.insert(id, (dir, installed));
+            let (id, dir, installed, added, size) = row?;
+            map.insert(id, (dir, installed, added, size));
         }
         Ok(map)
+    }
+
+    /// Zapisuje gry widziane w bibliotece Amazon — data pierwszego dopisania zostaje.
+    pub fn touch_amazon_games(&self, ids: &[String]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = now_ms();
+        let mut stmt = conn.prepare_cached(
+            "INSERT INTO amazon_games (id, added_at, last_seen_at) VALUES (?1, ?2, ?2)
+             ON CONFLICT(id) DO UPDATE SET
+               last_seen_at = excluded.last_seen_at,
+               added_at = CASE WHEN amazon_games.added_at = 0 THEN excluded.added_at ELSE amazon_games.added_at END",
+        )?;
+        for id in ids {
+            stmt.execute(params![id, now])?;
+        }
+        Ok(())
+    }
+
+    /// Waga instalacji gry Amazon w bajtach.
+    pub fn set_amazon_size_bytes(&self, game_id: &str, bytes: u64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO amazon_games (id, size_bytes, last_seen_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET size_bytes = excluded.size_bytes",
+            params![game_id, bytes as i64, now_ms()],
+        )?;
+        Ok(())
     }
 
     // —————————————— EPIC ——————————————
@@ -425,25 +526,56 @@ impl Database {
         }
     }
 
-    /// Wszystkie zapisane stany gier Epic: `id -> (folder, zainstalowana)`.
+    /// Wszystkie zapisane stany gier Epic:
+    /// `id -> (folder, zainstalowana, dodana_do_biblioteki, waga_instalacji)`.
     pub fn epic_states(
         &self,
-    ) -> Result<std::collections::HashMap<String, (Option<String>, bool)>> {
+    ) -> Result<std::collections::HashMap<String, (Option<String>, bool, i64, u64)>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id, install_dir, installed FROM epic_games")?;
+        let mut stmt = conn
+            .prepare("SELECT id, install_dir, installed, added_at, size_bytes FROM epic_games")?;
         let rows = stmt.query_map([], |r| {
             Ok((
                 r.get::<_, String>(0)?,
                 r.get::<_, Option<String>>(1)?,
                 r.get::<_, i64>(2)? != 0,
+                r.get::<_, i64>(3)?,
+                r.get::<_, i64>(4)?.max(0) as u64,
             ))
         })?;
         let mut map = std::collections::HashMap::new();
         for row in rows {
-            let (id, dir, installed) = row?;
-            map.insert(id, (dir, installed));
+            let (id, dir, installed, added, size) = row?;
+            map.insert(id, (dir, installed, added, size));
         }
         Ok(map)
+    }
+
+    /// Zapisuje gry widziane w bibliotece Epic — data pierwszego dopisania zostaje.
+    pub fn touch_epic_games(&self, ids: &[String]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = now_ms();
+        let mut stmt = conn.prepare_cached(
+            "INSERT INTO epic_games (id, added_at, last_seen_at) VALUES (?1, ?2, ?2)
+             ON CONFLICT(id) DO UPDATE SET
+               last_seen_at = excluded.last_seen_at,
+               added_at = CASE WHEN epic_games.added_at = 0 THEN excluded.added_at ELSE epic_games.added_at END",
+        )?;
+        for id in ids {
+            stmt.execute(params![id, now])?;
+        }
+        Ok(())
+    }
+
+    /// Waga instalacji gry Epic w bajtach.
+    pub fn set_epic_size_bytes(&self, game_id: &str, bytes: u64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO epic_games (id, size_bytes, last_seen_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET size_bytes = excluded.size_bytes",
+            params![game_id, bytes as i64, now_ms()],
+        )?;
+        Ok(())
     }
 }
 
@@ -466,6 +598,9 @@ mod tests {
             publishers: Vec::new(),
             platforms: Vec::new(),
             install_dir: None,
+            launch_exe: None,
+            size_bytes: 0,
+            added_at: 0,
         }
     }
 
